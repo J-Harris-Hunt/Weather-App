@@ -105,8 +105,8 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
     try:
         lat, lon, location_name = get_coordinates(query)
 
-        # Direct URL request so commas are NOT encoded as %2C
-        api_url = (
+        # Raw URL prevents requests from %2C encoding commas
+        raw_url = (
             f"https://api.open-meteo.com/v1/forecast?"
             f"latitude={lat}&longitude={lon}"
             f"&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m"
@@ -115,8 +115,12 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
             f"&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch"
             f"&timezone=auto"
         )
-        req = requests.get(api_url, timeout=10)
+        req = requests.get(raw_url, timeout=10)
         res = req.json()
+
+        # If Open-Meteo returns an error, raise it immediately so we can see the exact cause!
+        if "error" in res and res["error"]:
+            raise HTTPException(status_code=500, detail=f"Open-Meteo Error: {res.get('reason')}")
 
         curr = res.get("current", {})
         temp = round(curr.get("temperature_2m") if curr.get("temperature_2m") is not None else 72)
