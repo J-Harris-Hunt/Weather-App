@@ -14,38 +14,75 @@ WMO_MAP = {
     65: "Heavy rain", 71: "Slight snow", 75: "Heavy snow", 95: "Thunderstorm"
 }
 
+def get_coordinates(query: str):
+    """Resolve any US ZIP code or City to real lat/lon"""
+    clean_q = query.strip()
+    # 1. If it's a 5-digit US ZIP Code
+    if clean_q.isdigit() and len(clean_q) == 5:
+        try:
+            r = requests.get(f"https://api.zippopotam.us/us/{clean_q}", timeout=5)
+            if r.status_code == 200:
+                data = r.json()
+                place = data["places"][0]
+                lat = float(place["latitude"])
+                lon = float(place["longitude"])
+                name = f"{place['place name']}, {place['state abbreviation']}"
+                return lat, lon, name
+        except Exception:
+            pass
+
+    # 2. General City/State Geocoding via Open-Meteo
+    try:
+        geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={clean_q}&count=1&language=en&format=json"
+        geo_res = requests.get(geo_url, timeout=5).json()
+        if "results" in geo_res and len(geo_res["results"]) > 0:
+            top = geo_res["results"][0]
+            name = f"{top.get('name')}, {top.get('admin1', '')}"
+            return float(top["latitude"]), float(top["longitude"]), name
+    except Exception:
+        pass
+
+    # Default fallback to Wilmington if lookup fails
+    return 34.2257, -77.9447, "Wilmington, NC"
+
+
 @app.get("/weather")
 def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
     try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude=34.2257&longitude=-77.9447&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto"
+        lat, lon, location_name = get_coordinates(query)
+
+        # Dynamic forecast with automatic local timezone!
+        url = (
+            f"https://api.open-meteo.com/v1/forecast?"
+            f"latitude={lat}&longitude={lon}&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch"
+            f"&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,apparent_temperature,precipitation,uv_index"
+            f"&hourly=temperature_2m,weather_code,precipitation_probability,is_day"
+            f"&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset"
+            f"&timezone=auto"
+        )
         res = requests.get(url, timeout=10).json()
-        
+
         curr = res.get("current", {})
         temp = round(curr.get("temperature_2m", 72))
         hum = float(curr.get("relative_humidity_2m", 50))
         wind = float(curr.get("wind_speed_10m", 5))
+        feels_like = round(curr.get("apparent_temperature", temp))
+        uv_idx = curr.get("uv_index", 5.0)
 
         hourly = res.get("hourly", {})
         times = hourly.get("time", [])
         temps = hourly.get("temperature_2m", [])
         w_codes = hourly.get("weather_code", [])
         p_probs = hourly.get("precipitation_probability", [])
+        is_day_list = hourly.get("is_day", [])
 
-        now_utc = datetime.now()
+        # Match local time from Open-Meteo
+        now_str = curr.get("time", "")
         start_idx = 0
         for idx, t_str in enumerate(times):
-            dt = datetime.fromisoformat(t_str)
-            if dt >= now_utc:
-                start_idx = max(0, idx - 1)
+            if t_str >= now_str:
+                start_idx = idx
                 break
-
-        hourly_36 = []
-        next_24_probs = []
-        peak_precip_val = 0
-        peak_precip_time = "Now"
-
-        for i in range(start_idx, min(start_idx + 36, len(times))):
-            dt = datetime.fromisoformat(times[i])
             h_temp = round(temps[i]) if i < len(temps) else temp
             h_cond = WMO_MAP.get(w_codes[i], "Clear") if i < len(w_codes) else "Clear"
             h_rain = p_probs[i] if i < len(p_probs) else 0
