@@ -105,20 +105,17 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
     try:
         lat, lon, location_name = get_coordinates(query)
 
-        # Build clean params dictionary for Open-Meteo
-        params = {
-            "latitude": lat,
-            "longitude": lon,
-            "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m",
-            "hourly": "temperature_2m,weather_code,precipitation_probability,is_day",
-            "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset",
-            "temperature_unit": "fahrenheit",
-            "wind_speed_unit": "mph",
-            "precipitation_unit": "inch",
-            "timezone": "auto"
-        }
-        
-        req = requests.get("https://api.open-meteo.com/v1/forecast", params=params, timeout=10)
+        # Raw URL prevents requests from %2C encoding commas
+        raw_url = (
+            f"https://api.open-meteo.com/v1/forecast?"
+            f"latitude={lat}&longitude={lon}"
+            f"&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m"
+            f"&hourly=temperature_2m,weather_code,precipitation_probability,is_day"
+            f"&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset"
+            f"&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch"
+            f"&timezone=auto"
+        )
+        req = requests.get(raw_url, timeout=10)
         res = req.json()
 
         curr = res.get("current", {})
@@ -138,11 +135,18 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
         # Match local time safely
         now_str = curr.get("time", "")
         start_idx = 0
-        if times and now_str:
-            for idx, t_str in enumerate(times):
-                if str(t_str)[:13] >= str(now_str)[:13]:
-                    start_idx = idx
-                    break
+        if times:
+            if now_str:
+                for idx, t_str in enumerate(times):
+                    if str(t_str) >= str(now_str):
+                        start_idx = idx
+                        break
+            else:
+                local_now_prefix = datetime.now().strftime("%Y-%m-%dT%H")
+                for idx, t_str in enumerate(times):
+                    if str(t_str)[:13] >= local_now_prefix:
+                        start_idx = idx
+                        break
 
         hourly_36 = []
         next_24_probs = []
@@ -230,14 +234,15 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
         daily_list = []
         limit_days = min(5, len(d_times)) if d_times else 5
         for i in range(limit_days):
-            d_str = d_times[i] if i < len(d_times) else ""
+            d_str = d_times[i] if (d_times and i < len(d_times)) else ""
             try:
                 dt_obj = datetime.fromisoformat(d_str)
                 day_name = dt_obj.strftime("%A")
+                date_label = f"{day_name} ({d_str})"
             except Exception:
                 dt_obj = datetime.now() + timedelta(days=i)
                 day_name = dt_obj.strftime("%A")
-                d_str = dt_obj.strftime("%Y-%m-%d")
+                date_label = f"{day_name} ({dt_obj.strftime('%Y-%m-%d')})"
             
             s_rise = "06:55 AM"
             if i < len(sunrises) and sunrises[i]:
@@ -277,7 +282,7 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
                 n_sum = f"Clear and calm night, low of {l_val}°F."
 
             daily_list.append({
-                "date": f"{day_name} ({d_str})",
+                "date": date_label,
                 "high": h_val,
                 "low": l_val,
                 "rain_prob_max": r_val,
@@ -315,7 +320,6 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
             {"title": "Carolina Panthers (NFL)", "venue": "Bank of America Stadium (Charlotte, NC)", "time": "Sunday 1:00 PM", "conditions": f"{temp}°F, {WMO_MAP.get(curr.get('weather_code', 0), 'Clear')}"}
         ]
         
-        # If user searched for custom sports in query
         if sport_team:
             for s_item in sport_team.split(","):
                 k = s_item.strip().lower()
