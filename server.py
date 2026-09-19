@@ -83,23 +83,45 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
             if t_str >= now_str:
                 start_idx = idx
                 break
+
+        hourly_36 = []
+        next_24_probs = []
+        peak_precip_val = 0
+        peak_precip_time = "Now"
+
+        end_idx = min(start_idx + 36, len(times))
+        for i in range(start_idx, end_idx):
+            t_str = times[i] if i < len(times) else ""
             h_temp = round(temps[i]) if i < len(temps) else temp
-            h_cond = WMO_MAP.get(w_codes[i], "Clear") if i < len(w_codes) else "Clear"
+            h_code = w_codes[i] if i < len(w_codes) else 0
             h_rain = p_probs[i] if i < len(p_probs) else 0
+            h_cond = WMO_MAP.get(h_code, "Clear")
+
+            try:
+                dt = datetime.fromisoformat(t_str)
+                hour_display = dt.strftime("%I %p").lstrip("0")
+                day_display = dt.strftime("%a")
+                is_night = dt.hour < 6 or dt.hour > 20
+            except Exception:
+                hour_display = t_str
+                day_display = ""
+                is_night = False
 
             if i < start_idx + 24:
                 next_24_probs.append(h_rain)
                 if h_rain > peak_precip_val:
                     peak_precip_val = h_rain
-                    peak_precip_time = dt.strftime("%I %p").lstrip("0")
+                    peak_precip_time = hour_display
 
             hourly_36.append({
-                "hour": dt.strftime("%I %p").lstrip("0"),
-                "day": dt.strftime("%a"),
+                "time": hour_display,
+                "hour": hour_display,
+                "day": day_display,
                 "temp": h_temp,
                 "condition": h_cond,
+                "weather_code": h_code,
                 "rain_chance": h_rain,
-                "is_night": dt.hour < 6 or dt.hour > 20
+                "is_night": is_night
             })
 
         max_next_24 = max(next_24_probs) if next_24_probs else 0
