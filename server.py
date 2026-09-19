@@ -15,6 +15,23 @@ WMO_MAP = {
     65: "Heavy rain", 71: "Slight snow", 75: "Heavy snow", 95: "Thunderstorm"
 }
 
+# Regional sports directory
+SPORTS_DB = {
+    "braves": ("Atlanta Braves (MLB)", "Truist Park (Atlanta, GA)", "MLB Regular Season Matchup"),
+    "atlanta braves": ("Atlanta Braves (MLB)", "Truist Park (Atlanta, GA)", "MLB Regular Season Matchup"),
+    "wolfpack": ("NC State Wolfpack (NCAA)", "Carter-Finley Stadium (Raleigh, NC)", "Saturday 3:30 PM (ACC)"),
+    "nc state": ("NC State Wolfpack (NCAA)", "Carter-Finley Stadium (Raleigh, NC)", "Saturday 3:30 PM (ACC)"),
+    "nc state wolfpack": ("NC State Wolfpack (NCAA)", "Carter-Finley Stadium (Raleigh, NC)", "Saturday 3:30 PM (ACC)"),
+    "tar heels": ("UNC Tar Heels (NCAA)", "Kenan Memorial Stadium (Chapel Hill, NC)", "Saturday 12:00 PM (ACC)"),
+    "unc": ("UNC Tar Heels (NCAA)", "Kenan Memorial Stadium (Chapel Hill, NC)", "Saturday 12:00 PM (ACC)"),
+    "blue devils": ("Duke Blue Devils (NCAA)", "Wallace Wade Stadium (Durham, NC)", "Saturday 7:00 PM (ACC)"),
+    "duke": ("Duke Blue Devils (NCAA)", "Wallace Wade Stadium (Durham, NC)", "Saturday 7:00 PM (ACC)"),
+    "hurricanes": ("Carolina Hurricanes (NHL)", "Lenovo Center (Raleigh, NC)", "NHL Regular Season Matchup"),
+    "carolina hurricanes": ("Carolina Hurricanes (NHL)", "Lenovo Center (Raleigh, NC)", "NHL Regular Season Matchup"),
+    "panthers": ("Carolina Panthers (NFL)", "Bank of America Stadium (Charlotte, NC)", "Sunday 1:00 PM (NFL)"),
+    "carolina panthers": ("Carolina Panthers (NFL)", "Bank of America Stadium (Charlotte, NC)", "Sunday 1:00 PM (NFL)")
+}
+
 def get_coordinates(query: str):
     """Resolve any US ZIP code or City to real lat/lon safely"""
     clean_q = str(query).strip()
@@ -57,12 +74,10 @@ def get_coordinates(query: str):
 
 def calculate_moon(dt: datetime):
     """Calculates approximate moon phase and illumination percentage for any date"""
-    # Known new moon baseline: Jan 18, 2026
     diff = (dt - datetime(2026, 1, 18)).total_seconds() / 86400.0
     synodic = 29.53058867
     cycle_pos = (diff % synodic) / synodic
     
-    # Illumination fraction (0 to 1)
     illum = round((1 - math.cos(2 * math.pi * cycle_pos)) / 2 * 100)
     
     if cycle_pos < 0.03 or cycle_pos > 0.97:
@@ -90,23 +105,27 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
     try:
         lat, lon, location_name = get_coordinates(query)
 
-        # Dynamic forecast with automatic local timezone!
-        url = (
-            f"https://api.open-meteo.com/v1/forecast?"
-            f"latitude={lat}&longitude={lon}"
-            f"&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m"
-            f"&hourly=temperature_2m,weather_code,precipitation_probability,is_day"
-            f"&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset"
-            f"&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch"
-            f"&timezone=auto"
-        )
-        res = requests.get(url, timeout=10).json()
+        # Build clean params dictionary for Open-Meteo
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m",
+            "hourly": "temperature_2m,weather_code,precipitation_probability,is_day",
+            "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset",
+            "temperature_unit": "fahrenheit",
+            "wind_speed_unit": "mph",
+            "precipitation_unit": "inch",
+            "timezone": "auto"
+        }
+        
+        req = requests.get("https://api.open-meteo.com/v1/forecast", params=params, timeout=10)
+        res = req.json()
 
         curr = res.get("current", {})
-        temp = round(curr.get("temperature_2m", 72))
-        hum = float(curr.get("relative_humidity_2m", 50))
-        wind = float(curr.get("wind_speed_10m", 5))
-        feels_like = round(curr.get("apparent_temperature", temp))
+        temp = round(curr.get("temperature_2m") if curr.get("temperature_2m") is not None else 72)
+        hum = float(curr.get("relative_humidity_2m") if curr.get("relative_humidity_2m") is not None else 50)
+        wind = float(curr.get("wind_speed_10m") if curr.get("wind_speed_10m") is not None else 5)
+        feels_like = round(curr.get("apparent_temperature") if curr.get("apparent_temperature") is not None else temp)
         uv_idx = 5.0
 
         hourly = res.get("hourly", {})
@@ -116,23 +135,23 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
         p_probs = hourly.get("precipitation_probability", [])
         is_day_list = hourly.get("is_day", [])
 
-        # Match local time safely by year-month-day-hour
+        # Match local time safely
         now_str = curr.get("time", "")
-        now_prefix = now_str[:13] if len(now_str) >= 13 else ""
         start_idx = 0
-        for idx, t_str in enumerate(times):
-            if t_str[:13] >= now_prefix:
-                start_idx = idx
-                break
+        if times and now_str:
+            for idx, t_str in enumerate(times):
+                if str(t_str)[:13] >= str(now_str)[:13]:
+                    start_idx = idx
+                    break
 
         hourly_36 = []
         next_24_probs = []
         peak_precip_val = 0
         peak_precip_time = "Now"
 
-        end_idx = min(start_idx + 36, len(times))
+        end_idx = min(start_idx + 36, len(times)) if times else 0
         for i in range(start_idx, end_idx):
-            t_str = times[i] if i < len(times) else ""
+            t_str = times[i]
             h_temp = round(temps[i]) if (i < len(temps) and temps[i] is not None) else temp
             h_code = w_codes[i] if (i < len(w_codes) and w_codes[i] is not None) else 0
             h_rain = p_probs[i] if (i < len(p_probs) and p_probs[i] is not None) else 0
@@ -197,12 +216,12 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
         # Current day sunrise & sunset
         current_sunrise = "06:55 AM"
         current_sunset = "07:15 PM"
-        if sunrises:
+        if sunrises and len(sunrises) > 0:
             try:
                 current_sunrise = datetime.fromisoformat(sunrises[0]).strftime("%I:%M %p").lstrip("0")
             except Exception:
                 pass
-        if sunsets:
+        if sunsets and len(sunsets) > 0:
             try:
                 current_sunset = datetime.fromisoformat(sunsets[0]).strftime("%I:%M %p").lstrip("0")
             except Exception:
@@ -216,8 +235,9 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
                 dt_obj = datetime.fromisoformat(d_str)
                 day_name = dt_obj.strftime("%A")
             except Exception:
-                day_name = f"Day {i+1}"
                 dt_obj = datetime.now() + timedelta(days=i)
+                day_name = dt_obj.strftime("%A")
+                d_str = dt_obj.strftime("%Y-%m-%d")
             
             s_rise = "06:55 AM"
             if i < len(sunrises) and sunrises[i]:
@@ -271,7 +291,6 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
         m_phase, m_illum = calculate_moon(datetime.now())
 
         # Determine if coastal or inland based on coordinates
-        # Coast of NC is east of longitude -78.3
         is_coastal = (lon >= -78.3 and lat <= 36.5 and lat >= 33.5)
         if is_coastal:
             coastal_status = f"Sector: {location_name} (Coastal Waters Active). Water Temp: 78°F. Surf: 2-3 ft swell."
@@ -290,6 +309,25 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
         else:
             frizz_advice = f"Low Frizz Risk (Humidity {hum}%). Natural styling will hold comfortably."
             makeup_advice = "Hydrating foundation advised for drier air conditions."
+
+        # Sports events generation
+        active_sports = [
+            {"title": "Carolina Panthers (NFL)", "venue": "Bank of America Stadium (Charlotte, NC)", "time": "Sunday 1:00 PM", "conditions": f"{temp}°F, {WMO_MAP.get(curr.get('weather_code', 0), 'Clear')}"}
+        ]
+        
+        # If user searched for custom sports in query
+        if sport_team:
+            for s_item in sport_team.split(","):
+                k = s_item.strip().lower()
+                if k in SPORTS_DB:
+                    t_title, t_venue, t_sched = SPORTS_DB[k]
+                    if not any(x["title"] == t_title for x in active_sports):
+                        active_sports.append({
+                            "title": t_title,
+                            "venue": t_venue,
+                            "time": t_sched,
+                            "conditions": f"{temp}°F, {WMO_MAP.get(curr.get('weather_code', 0), 'Clear')}"
+                        })
 
         return {
             "lat": lat, "lon": lon, "location_name": location_name,
@@ -340,9 +378,7 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
                 ]
             },
             "sporting_event": {
-                "events": [
-                    {"title": "Carolina Panthers (NFL)", "venue": "Bank of America Stadium (Charlotte, NC)", "time": "Sunday 1:00 PM", "conditions": f"{temp}°F, {WMO_MAP.get(curr.get('weather_code', 0), 'Clear')}"}
-                ]
+                "events": active_sports
             },
             "astronomy": {
                 "sunrise": current_sunrise,
