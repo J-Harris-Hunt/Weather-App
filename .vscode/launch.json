@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend: FastAPI & Scheduler",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/server.py",
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env",
+      "justMyCode": true
+    },
+    {
+      "name": "Frontend: Flet App",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/main.py",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Launch Weather Suite (Server + App)",
+      "configurations": ["Backend: FastAPI & Scheduler", "Frontend: Flet App"],
+      "stopAll": true
+    }
+  ]
+}

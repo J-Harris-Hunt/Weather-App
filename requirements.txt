@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+requests
+apscheduler
+twilio
+flet
+python-dotenv
+pydantic
