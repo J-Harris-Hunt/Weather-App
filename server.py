@@ -90,22 +90,24 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
     try:
         lat, lon, location_name = get_coordinates(query)
 
+        # Dynamic forecast with automatic local timezone!
         url = (
             f"https://api.open-meteo.com/v1/forecast?"
-            f"latitude={lat}&longitude={lon}&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch"
-            f"&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,apparent_temperature,precipitation,uv_index"
+            f"latitude={lat}&longitude={lon}"
+            f"&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m"
             f"&hourly=temperature_2m,weather_code,precipitation_probability,is_day"
             f"&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset"
+            f"&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch"
             f"&timezone=auto"
         )
         res = requests.get(url, timeout=10).json()
 
         curr = res.get("current", {})
-        temp = round(curr.get("temperature_2m") or 72)
-        hum = float(curr.get("relative_humidity_2m") or 50)
-        wind = float(curr.get("wind_speed_10m") or 5)
-        feels_like = round(curr.get("apparent_temperature") or temp)
-        uv_idx = curr.get("uv_index") or 5.0
+        temp = round(curr.get("temperature_2m", 72))
+        hum = float(curr.get("relative_humidity_2m", 50))
+        wind = float(curr.get("wind_speed_10m", 5))
+        feels_like = round(curr.get("apparent_temperature", temp))
+        uv_idx = 5.0
 
         hourly = res.get("hourly", {})
         times = hourly.get("time", [])
@@ -114,10 +116,12 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
         p_probs = hourly.get("precipitation_probability", [])
         is_day_list = hourly.get("is_day", [])
 
+        # Match local time safely by year-month-day-hour
         now_str = curr.get("time", "")
+        now_prefix = now_str[:13] if len(now_str) >= 13 else ""
         start_idx = 0
         for idx, t_str in enumerate(times):
-            if str(t_str) >= str(now_str):
+            if t_str[:13] >= now_prefix:
                 start_idx = idx
                 break
 
@@ -383,4 +387,5 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("server:app", host="0.0.0.0", port=port)
