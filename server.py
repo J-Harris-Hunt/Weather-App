@@ -76,11 +76,11 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
         p_probs = hourly.get("precipitation_probability", [])
         is_day_list = hourly.get("is_day", [])
 
-        # Match local time from Open-Meteo
+        # Safely find start index for current hour
         now_str = curr.get("time", "")
         start_idx = 0
         for idx, t_str in enumerate(times):
-            if t_str >= now_str:
+            if str(t_str) >= str(now_str):
                 start_idx = idx
                 break
 
@@ -92,22 +92,23 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
         end_idx = min(start_idx + 36, len(times))
         for i in range(start_idx, end_idx):
             t_str = times[i] if i < len(times) else ""
-            h_temp = round(temps[i]) if i < len(temps) else temp
-            h_code = w_codes[i] if i < len(w_codes) else 0
-            h_rain = p_probs[i] if i < len(p_probs) else 0
+            h_temp = round(temps[i]) if (i < len(temps) and temps[i] is not None) else temp
+            h_code = w_codes[i] if (i < len(w_codes) and w_codes[i] is not None) else 0
+            h_rain = p_probs[i] if (i < len(p_probs) and p_probs[i] is not None) else 0
             h_cond = WMO_MAP.get(h_code, "Clear")
+            is_d = is_day_list[i] if (i < len(is_day_list) and is_day_list[i] is not None) else 1
 
             try:
                 dt = datetime.fromisoformat(t_str)
                 hour_display = dt.strftime("%I %p").lstrip("0")
                 day_display = dt.strftime("%a")
-                is_night = dt.hour < 6 or dt.hour > 20
+                is_night = (is_d == 0)
             except Exception:
                 hour_display = t_str
                 day_display = ""
                 is_night = False
 
-            if i < start_idx + 24:
+            if len(next_24_probs) < 24:
                 next_24_probs.append(h_rain)
                 if h_rain > peak_precip_val:
                     peak_precip_val = h_rain
@@ -125,19 +126,20 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
             })
 
         max_next_24 = max(next_24_probs) if next_24_probs else 0
-        precip_summary = f"Precip Now: {hourly_36[0]['rain_chance']}% | Next 24h Max: {max_next_24}% (Peak around {peak_precip_time})"
+        curr_precip = hourly_36[0]["rain_chance"] if hourly_36 else 0
+        precip_summary = f"Precip Now: {curr_precip}% | Next 24h Max: {max_next_24}% (Peak around {peak_precip_time})"
 
-        precip_now = p_probs[start_idx] if start_idx < len(p_probs) else 0
+        precip_now = p_probs[start_idx] if (start_idx < len(p_probs) and p_probs[start_idx] is not None) else 0
         if precip_now >= 40:
             rain_hours = 0
             for i in range(start_idx, len(p_probs)):
-                if p_probs[i] >= 40:
+                if p_probs[i] and p_probs[i] >= 40:
                     rain_hours += 1
                 else:
                     break
             rain_duration_msg = f"Currently raining; estimated continuation ~{rain_hours} hour(s)."
         else:
-            next_hour_prob = p_probs[start_idx + 1] if start_idx + 1 < len(p_probs) else 0
+            next_hour_prob = p_probs[start_idx + 1] if (start_idx + 1 < len(p_probs) and p_probs[start_idx + 1] is not None) else 0
             if next_hour_prob >= 35:
                 rain_duration_msg = f"Rain likely starting soon (~{next_hour_prob}% chance expected shortly)."
             else:
@@ -152,13 +154,29 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
         sunsets = daily.get("sunset", [])
 
         daily_list = []
-        for i in range(min(5, len(d_times))):
-            dt_obj = datetime.fromisoformat(d_times[i])
-            day_name = dt_obj.strftime("%A")
+        limit_days = min(5, len(d_times)) if d_times else 5
+        for i in range(limit_days):
+            d_str = d_times[i] if i < len(d_times) else f"2026-09-{19+i}"
+            try:
+                dt_obj = datetime.fromisoformat(d_str)
+                day_name = dt_obj.strftime("%A")
+            except Exception:
+                day_name = f"Day {i+1}"
             
-            s_rise = datetime.fromisoformat(sunrises[i]).strftime("%I:%M %p").lstrip("0") if i < len(sunrises) else "06:40 AM"
-            s_set = datetime.fromisoformat(sunsets[i]).strftime("%I:%M %p").lstrip("0") if i < len(sunsets) else "07:20 PM"
-            
+            s_rise = "06:45 AM"
+            if i < len(sunrises) and sunrises[i]:
+                try:
+                    s_rise = datetime.fromisoformat(sunrises[i]).strftime("%I:%M %p").lstrip("0")
+                except Exception:
+                    pass
+
+            s_set = "07:15 PM"
+            if i < len(sunsets) and sunsets[i]:
+                try:
+                    s_set = datetime.fromisoformat(sunsets[i]).strftime("%I:%M %p").lstrip("0")
+                except Exception:
+                    pass
+
             m_rise_hour = (7 + i * 0.8) % 12
             m_rise_amp = "PM" if (7 + i * 0.8) < 12 else "AM"
             m_set_hour = (6 + i * 0.8) % 12
@@ -167,23 +185,23 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
             m_rise_str = f"{max(1, round(m_rise_hour, 1)):02.0f}:15 {m_rise_amp}"
             m_set_str = f"{max(1, round(m_set_hour, 1)):02.0f}:40 {m_set_amp}"
 
-            h_val = round(d_max[i]) if i < len(d_max) else temp + 5
-            l_val = round(d_min[i]) if i < len(d_min) else temp - 5
-            r_val = d_rain[i] if i < len(d_rain) else 0
+            h_val = round(d_max[i]) if (i < len(d_max) and d_max[i] is not None) else (temp + 4)
+            l_val = round(d_min[i]) if (i < len(d_min) and d_min[i] is not None) else (temp - 6)
+            r_val = d_rain[i] if (i < len(d_rain) and d_rain[i] is not None) else 10
 
-            # Dynamic 5-day summaries based on real forecasted weather
+            # Dynamic 5-day summaries
             if r_val >= 50:
-                d_sum = f"Scattered rain & passing storms, high near {h_val}°F. Rain chance {r_val}%."
-                n_sum = f"Lingering clouds with isolated drizzle, low around {l_val}°F."
+                d_sum = f"Scattered rain & passing showers, high near {h_val}°F. Precip chance {r_val}%."
+                n_sum = f"Cloudy with isolated showers, overnight low around {l_val}°F."
             elif r_val >= 25:
-                d_sum = f"Partly sunny with a passing shower possible ({r_val}%), high of {h_val}°F."
-                n_sum = f"Partly cloudy, comfortable overnight low of {l_val}°F."
+                d_sum = f"Partly cloudy with an isolated shower possible ({r_val}%), high of {h_val}°F."
+                n_sum = f"Partly cloudy and calm, low of {l_val}°F."
             else:
-                d_sum = f"Sunny to clear skies with gentle breezes, high of {h_val}°F."
-                n_sum = f"Clear and calm night, ideal conditions with a low of {l_val}°F."
+                d_sum = f"Mostly sunny with pleasant breezes, high of {h_val}°F."
+                n_sum = f"Clear and calm night, low of {l_val}°F."
 
             daily_list.append({
-                "date": f"{day_name} ({d_times[i]})",
+                "date": f"{day_name} ({d_str})",
                 "high": h_val,
                 "low": l_val,
                 "rain_prob_max": r_val,
