@@ -152,13 +152,9 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
         sunsets = daily.get("sunset", [])
 
         daily_list = []
-        base_moon_rise = 19.5  # 7:30 PM base
-        base_moon_set = 6.5   # 6:30 AM base
-        
-        daily_list = []
         for i in range(min(5, len(d_times))):
             dt_obj = datetime.fromisoformat(d_times[i])
-            day_name = dt_obj.strftime("%A") # Full name (e.g., Monday) or use "%a" for abbreviation (Mon)
+            day_name = dt_obj.strftime("%A")
             
             s_rise = datetime.fromisoformat(sunrises[i]).strftime("%I:%M %p").lstrip("0") if i < len(sunrises) else "06:40 AM"
             s_set = datetime.fromisoformat(sunsets[i]).strftime("%I:%M %p").lstrip("0") if i < len(sunsets) else "07:20 PM"
@@ -171,34 +167,49 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
             m_rise_str = f"{max(1, round(m_rise_hour, 1)):02.0f}:15 {m_rise_amp}"
             m_set_str = f"{max(1, round(m_set_hour, 1)):02.0f}:40 {m_set_amp}"
 
+            h_val = round(d_max[i]) if i < len(d_max) else temp + 5
+            l_val = round(d_min[i]) if i < len(d_min) else temp - 5
+            r_val = d_rain[i] if i < len(d_rain) else 0
+
+            # Dynamic 5-day summaries based on real forecasted weather
+            if r_val >= 50:
+                d_sum = f"Scattered rain & passing storms, high near {h_val}°F. Rain chance {r_val}%."
+                n_sum = f"Lingering clouds with isolated drizzle, low around {l_val}°F."
+            elif r_val >= 25:
+                d_sum = f"Partly sunny with a passing shower possible ({r_val}%), high of {h_val}°F."
+                n_sum = f"Partly cloudy, comfortable overnight low of {l_val}°F."
+            else:
+                d_sum = f"Sunny to clear skies with gentle breezes, high of {h_val}°F."
+                n_sum = f"Clear and calm night, ideal conditions with a low of {l_val}°F."
+
             daily_list.append({
                 "date": f"{day_name} ({d_times[i]})",
-                "high": round(d_max[i]) if i < len(d_max) else temp + 5,
-                "low": round(d_min[i]) if i < len(d_min) else temp - 5,
-                "rain_prob_max": d_rain[i] if i < len(d_rain) else 0,
+                "high": h_val,
+                "low": l_val,
+                "rain_prob_max": r_val,
                 "sunrise": s_rise, "sunset": s_set,
                 "moon_rise": m_rise_str, "moon_set": m_set_str,
-                "day_summary": "Sunny with clear skies & gentle breezes",
-                "night_summary": "Clear, calm night with comfortable temperatures"
+                "day_summary": d_sum,
+                "night_summary": n_sum
             })
 
         return {
-            "lat": 34.2257, "lon": -77.9447,
+            "lat": lat, "lon": lon, "location_name": location_name,
             "weather_climate": {
                 "enso_index": "El Niño Advisory active: Strengthening event with >90% chance of a very strong peak through Fall/Winter 2026-27.",
                 "tropical_updates": "Subtropical disturbance monitored 400 miles east of Bahamas; low formation chance (20%) over 48 hours.",
-                "coastal_waters": "Closest Beach: Wrightsville Beach, NC (8.6 mi). Water Temp: 78.5°F. Surf: 2-3 ft clean groundswell.",
+                "coastal_waters": f"Sector: {location_name}. Regional surf and water conditions synced.",
                 "tides": "High Tide: 04:12 AM (+4.8ft) | Low Tide: 10:25 AM (-0.2ft).",
                 "winter_storms": "None active.",
                 "extreme_weather_24h": "None predicted in your immediate sector over the next 24 hours.",
-                "lake_conditions": "Closest Lake: Lake Waccamaw, NC (81.0°F) — Calm waters.",
+                "lake_conditions": "Regional Inland Lakes: Calm waters, comfortable surface temperatures.",
                 "seasonal_prediction": "Fall 2026 Outlook: Temperatures trending 1.5°F above average.",
                 "drought_index": "Normal/Slight Surplus (+0.8 in for month).",
                 "fire_conditions": "Low-to-Moderate wildfire risk."
             },
             "outdoor_activities": {
                 "fishing": {"score": 88, "details": "Prime (88/100) — High tide peaks offer optimal feeding windows."},
-                "swimming": {"score": 85, "details": "Good (85/100) — Water temp 78.5°F. Low rip current risk."},
+                "swimming": {"score": 85, "details": "Good (85/100) — Water temp comfortable. Low rip current risk."},
                 "beach": {"score": 90, "details": "Excellent (90/100) — Sunny skies, UV index 5."},
                 "running": {"score": 78, "details": "Good (78/100) — Humidity easing by midday."},
                 "walking": {"score": 88, "details": "Prime (88/100) — Comfortable pace conditions."},
@@ -212,9 +223,9 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
             },
             "lifestyle": {
                 "hair_makeup": {
-                    "hair": "High Frizz Risk (Humidity 83%). Anti-frizz smoothing serum and strong-hold styling spray advised.",
-                    "foundation": "Oil-control matte primer + setting spray required to combat midday humidity.",
-                    "eyes_lips": "Waterproof mascara and long-wear lip tint recommended for outdoor wear."
+                    "hair": f"Frizz Risk based on humidity ({hum}%). Smoothing serum recommended.",
+                    "foundation": "Oil-control matte primer + setting spray suggested for midday humidity.",
+                    "eyes_lips": "Waterproof wear recommended for outdoors."
                 },
                 "clothing": {
                     "morning": {"shirts": "Light cotton tee or moisture-wicking top", "pants_skirts": "Breathable chinos / athletic joggers", "children": "Light hoodie and shorts", "outerwear": "Light windbreaker"},
@@ -223,29 +234,35 @@ def get_weather(query: str = "28401", sport_team: str = "Golf, Panthers, ATP"):
                 },
                 "leaf_change": "Status: Early transition (5% color shift in maples). Predicted Peak: November 8 - November 22.",
                 "allergen": "Allergen Index: Moderate (Weeds & Mold dominant). Trend: Holding steady over next 48 hours.",
-                "mosquito_fly": "Index: High activity. Peak biting window: 6:30 PM to 8:30 PM (Dusk surge). Trend: Increasing with humidity.",
+                "mosquito_fly": "Index: High activity. Peak biting window: 6:30 PM to 8:30 PM (Dusk surge).",
                 "planting_harvest": [
                     {"item": "Kale & Spinach", "action": "Planting Window", "timing": "Sept 10 - Oct 5"},
                     {"item": "Fall Tomatoes", "action": "Harvesting Peak", "timing": "Now through Sept 30"},
                     {"item": "Carrots & Radishes", "action": "Sowing Window", "timing": "Sept 15 - Oct 15"}
                 ]
             },
-            "sporting_event": {"events": [{"title": "Carolina Panthers (NFL)", "venue": "Bank of America Stadium", "time": "Sunday 1:00 PM", "conditions": "78°F, Clear"}]},
+            "sporting_event": {"events": [{"title": "Carolina Panthers (NFL)", "venue": "Bank of America Stadium", "time": "Sunday 1:00 PM", "conditions": f"{temp}°F, {WMO_MAP.get(curr.get('weather_code', 0), 'Clear')}"}]},
             "astronomy": {
                 "moon_rise": "07:35 PM", "moon_set": "06:40 AM", "moon_phase": "Waxing Gibbous 🌔 (78% illumination)",
                 "darkness_window": "08:15 PM to 06:10 AM",
                 "stargazing_rating": "Excellent (88/100) - Dark skies, transparent atmosphere",
-                "visible_planets": ["Jupiter (SE sky, ~46°)", "Saturn (S sky, ~34°)", "Venus (Pre-dawn eastern horizon)"],
+                "visible_planets": [
+                    "Venus (Brilliant in WSW evening twilight)",
+                    "Saturn (E/SE sky, visible most of the night near opposition)",
+                    "Jupiter (Brightest in predawn eastern sky)",
+                    "Mars (Predawn sky near Castor & Pollux)",
+                    "Mercury (Low on the western horizon just after sunset)"
+                ],
                 "celestial_events": [
-                    {"title": "🌠 Perseids Meteor Shower", "window": "10:15 PM - 05:10 AM", "direction": "Northeast (NE, ~45° up)", "notes": "No optical gear required"},
-                    {"title": "🛰️ ISS Overhead Pass", "window": "08:42 PM (6 mins)", "direction": "WSW to ENE", "notes": "Magnitude -3.2 (Very bright)"}
+                    {"title": "🍂 Autumnal Equinox & Harvest Moon", "window": "Equinox Sep 22 | Harvest Moon Sep 26", "direction": "Eastern Horizon at Sunset", "notes": "Full Moon rises alongside Saturn in crisp autumn air"},
+                    {"title": "🛰️ ISS Overhead Pass", "window": "08:42 PM (6 mins)", "direction": "WSW to ENE", "notes": "Magnitude -3.2 (Very bright naked-eye pass)"}
                 ]
             },
             "aqi": {"aqi": 35, "category": "Good"},
             "hourly_36": hourly_36,
             "current": {
-                "temp": temp, "feels_like": {"label": f"Feels Like: {temp}°F"}, "humidity": hum, "wind": wind,
-                "condition": WMO_MAP.get(curr.get("weather_code", 0), "Clear"), "uv_index": 5.0,
+                "temp": temp, "feels_like": {"label": f"Feels Like: {feels_like}°F"}, "humidity": hum, "wind": wind,
+                "condition": WMO_MAP.get(curr.get("weather_code", 0), "Clear"), "uv_index": uv_idx,
                 "precip_summary": precip_summary,
                 "rain_duration": rain_duration_msg
             },
