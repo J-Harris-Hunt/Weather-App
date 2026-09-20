@@ -22,7 +22,7 @@ def main(page: ft.Page):
         "nc state": ("NC State Wolfpack (NCAA)", "Carter-Finley Stadium (Raleigh, NC)", "Saturday 3:30 PM (ACC)", "82°F, Partly cloudy"),
         "tar heels": ("UNC Tar Heels (NCAA)", "Kenan Memorial Stadium (Chapel Hill, NC)", "Saturday 12:00 PM (ACC)", "79°F, Mostly sunny"),
         "unc": ("UNC Tar Heels (NCAA)", "Kenan Memorial Stadium (Chapel Hill, NC)", "Saturday 12:00 PM (ACC)", "79°F, Mostly sunny"),
-        "duke": ("Duke Blue Devils (NCAA)", "Wallace Wade Stadium (Durham, NC)", "Saturday 7:00 PM (ACC)", "75°F, Clear"),
+        "duke": ("Duke Blue Devils (NCAA)", "Wallace Wade Stadium (Durham, NC)", "Saturday 7:00 PM (ACC)", "75°F, Clear sky"),
         "hurricanes": ("Carolina Hurricanes (NHL)", "Lenovo Center (Raleigh, NC)", "Preseason Matchup 7:00 PM", "68°F (Indoor Arena)")
     }
 
@@ -57,9 +57,11 @@ def main(page: ft.Page):
     uv_badge = ft.Text("UV: --", size=13, color="green300", weight=ft.FontWeight.BOLD)
     aqi_badge = ft.Text("AQI: --", size=13, color="green300", weight=ft.FontWeight.BOLD)
     
-    # Restored Main Area Sunrise & Sunset Controls
+    # Restored Main Area Sunrise, Sunset, Moonrise, Moonset Controls
     sunrise_text = ft.Text("🌅 Sunrise: --:-- AM", size=13, color="amber200", weight=ft.FontWeight.W_600)
     sunset_text = ft.Text("🌇 Sunset: --:-- PM", size=13, color="amber200", weight=ft.FontWeight.W_600)
+    moonrise_text = ft.Text("🌕 Moonrise: --:-- PM", size=13, color="cyan200", weight=ft.FontWeight.W_600)
+    moonset_text = ft.Text("🌑 Moonset: --:-- AM", size=13, color="cyan200", weight=ft.FontWeight.W_600)
 
     current_precip_text = ft.Text(
         "Precip Now: --% | Next 24h: --%", 
@@ -89,7 +91,7 @@ def main(page: ft.Page):
     forecast_container = ft.Container(
         content=forecast_row,
         padding=12,
-        height=400,
+        height=310,
         bgcolor="surfaceContainerHigh",
         border_radius=10,
     )
@@ -115,7 +117,7 @@ def main(page: ft.Page):
 
         data_to_render = dict(data_dict)
         
-        # Moon Timing
+        # Moon Timing Box
         if "moon_rise" in data_to_render or "moon_set" in data_to_render:
             m_rise = data_to_render.pop("moon_rise", "--")
             m_set = data_to_render.pop("moon_set", "--")
@@ -143,12 +145,52 @@ def main(page: ft.Page):
         for key, val in data_to_render.items():
             title = key.replace("_", " ").title()
 
-            # Sporting Events with Smart Team Lookup
-            if (key == "events" or category_key == "sporting_event") and isinstance(val, list):
+            # 1. Custom High-Readability Formatter for Fishing
+            if key == "fishing" and isinstance(val, dict):
+                f_score = val.get("score", "--")
+                f_details = val.get("details", "")
+                lines = [seg.strip() for seg in f_details.split(".") if seg.strip()]
+                
+                fishing_controls = [
+                    ft.Row([
+                        ft.Icon(ft.Icons.PHISHING, size=18, color="cyan300"),
+                        ft.Text("Fishing Outlook", size=14, weight=ft.FontWeight.BOLD, color="amber300"),
+                    ], spacing=8),
+                    ft.Divider(height=6, color="grey800"),
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Text("Activity Score:", size=12, color="grey300", weight=ft.FontWeight.W_500),
+                            ft.Text(f"{f_score}/100 (Prime)", size=13, color="green300", weight=ft.FontWeight.BOLD),
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        bgcolor="#1c1f26",
+                        padding=8,
+                        border_radius=6
+                    ),
+                    ft.Divider(height=4, color="transparent")
+                ]
+                for l in lines:
+                    fishing_controls.append(
+                        ft.Row([
+                            ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, size=13, color="amber200"),
+                            ft.Text(l, size=12, color="white", expand=True),
+                        ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.START)
+                    )
+
+                cards.append(
+                    ft.Container(
+                        content=ft.Column(fishing_controls, spacing=6),
+                        bgcolor="#252830",
+                        border_radius=8,
+                        padding=14,
+                        width=320,
+                    )
+                )
+
+            # 2. Sporting Events with Smart Team Lookup
+            elif (key == "events" or category_key == "sporting_event") and isinstance(val, list):
                 def add_custom_team(e):
                     team_raw = team_input.value.strip().lower()
                     if team_raw:
-                        # Check local catalog first
                         matched = False
                         for catalog_k, info in SPORTS_CATALOG.items():
                             if catalog_k in team_raw or team_raw in catalog_k:
@@ -229,7 +271,7 @@ def main(page: ft.Page):
                     )
                 )
 
-            # Planting & Harvest
+            # 3. Planting & Harvest
             elif ("planting" in key or "harvest" in key) and isinstance(val, list):
                 plant_controls = [
                     ft.Row([
@@ -269,7 +311,7 @@ def main(page: ft.Page):
                     )
                 )
 
-            # Celestial Events
+            # 4. Celestial Events
             elif key == "celestial_events" and isinstance(val, list):
                 event_controls = [
                     ft.Text("Celestial Events", size=15, weight=ft.FontWeight.BOLD, color="amber300"),
@@ -307,7 +349,7 @@ def main(page: ft.Page):
                     )
                 )
 
-            # Visible Planets
+            # 5. Visible Planets
             elif key == "visible_planets" and isinstance(val, list):
                 planet_items = [
                     ft.Text("Visible Planets", size=14, weight=ft.FontWeight.BOLD, color="amber300"),
@@ -333,7 +375,7 @@ def main(page: ft.Page):
                     )
                 )
 
-            # Nested Activity/Lifestyle Dictionaries (High Readability)
+            # 6. Nested Activity/Lifestyle Dictionaries (High Readability)
             elif isinstance(val, dict):
                 content_col = [
                     ft.Text(title, size=14, weight=ft.FontWeight.BOLD, color="amber300"),
@@ -376,7 +418,7 @@ def main(page: ft.Page):
                     )
                 )
 
-            # Standard Text Cards
+            # 7. Standard Text Cards
             else:
                 cards.append(
                     ft.Container(
@@ -515,11 +557,16 @@ def main(page: ft.Page):
                 wind_text.value = f"Wind: {curr.get('wind', '--')} mph"
                 uv_badge.value = f"UV: {curr.get('uv_index', '--')}"
                 
-                # Render Sunrise and Sunset cleanly
+                # Render Clean Sunrise, Sunset, Moonrise, and Moonset
                 s_rise_val = curr.get("sunrise") or res.get("astronomy", {}).get("sunrise", "06:57 AM")
                 s_set_val = curr.get("sunset") or res.get("astronomy", {}).get("sunset", "07:12 PM")
+                m_rise_val = curr.get("moon_rise") or res.get("astronomy", {}).get("moon_rise", "07:20 PM")
+                m_set_val = curr.get("moon_set") or res.get("astronomy", {}).get("moon_set", "06:35 AM")
+
                 sunrise_text.value = f"🌅 Sunrise: {s_rise_val}"
                 sunset_text.value = f"🌇 Sunset: {s_set_val}"
+                moonrise_text.value = f"🌕 Moonrise: {m_rise_val}"
+                moonset_text.value = f"🌑 Moonset: {m_set_val}"
 
                 aqi_data = res.get("aqi", {})
                 aqi_val = aqi_data.get('aqi', '--') if isinstance(aqi_data, dict) else str(aqi_data)
@@ -578,7 +625,7 @@ def main(page: ft.Page):
                     )
                 hourly_row.controls = hour_cards
 
-                # 2. Build Spacious, Clean 5-Day Cards
+                # 2. Build Proportional, Balanced 5-Day Cards
                 day_cards = []
                 for day in daily_data:
                     rain_pct = day.get("rain_prob_max", 0)
@@ -586,6 +633,8 @@ def main(page: ft.Page):
                     
                     d_sunrise = day.get("sunrise", s_rise_val)
                     d_sunset = day.get("sunset", s_set_val)
+                    d_moonrise = day.get("moon_rise", "--")
+                    d_moonset = day.get("moon_set", "--")
 
                     day_cards.append(
                         ft.Container(
@@ -595,47 +644,67 @@ def main(page: ft.Page):
                                 # Date Title
                                 ft.Text(day.get("date", ""), size=13, weight=ft.FontWeight.BOLD, color="amber200", text_align=ft.TextAlign.CENTER),
                                 
-                                # High / Low & Rain
-                                ft.Row([
-                                    ft.Row([
-                                        ft.Icon(ft.Icons.ARROW_UPWARD, size=12, color="red400"),
-                                        ft.Text(f"{day.get('high', '--')}°", size=13, weight=ft.FontWeight.BOLD, color="red300"),
-                                    ], spacing=2),
-                                    ft.Row([
-                                        ft.Icon(ft.Icons.WATER_DROP, size=12, color=prob_color),
-                                        ft.Text(f"{rain_pct}%", size=12, color=prob_color, weight=ft.FontWeight.BOLD),
-                                    ], spacing=2),
-                                    ft.Row([
-                                        ft.Icon(ft.Icons.ARROW_DOWNWARD, size=12, color="blue400"),
-                                        ft.Text(f"{day.get('low', '--')}°", size=13, weight=ft.FontWeight.BOLD, color="blue300"),
-                                    ], spacing=2),
-                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                # High & Low Temperatures Only
+                                ft.Container(
+                                    content=ft.Row([
+                                        ft.Row([
+                                            ft.Icon(ft.Icons.ARROW_UPWARD, size=13, color="red400"),
+                                            ft.Text(f"{day.get('high', '--')}°", size=14, weight=ft.FontWeight.BOLD, color="red300"),
+                                        ], spacing=3),
+                                        ft.Row([
+                                            ft.Icon(ft.Icons.ARROW_DOWNWARD, size=13, color="blue400"),
+                                            ft.Text(f"{day.get('low', '--')}°", size=14, weight=ft.FontWeight.BOLD, color="blue300"),
+                                        ], spacing=3),
+                                    ], alignment=ft.MainAxisAlignment.SPACE_AROUND),
+                                    bgcolor="#1c1f26",
+                                    padding=ft.Padding(10, 5, 10, 5),
+                                    border_radius=6,
+                                ),
 
-                                ft.Divider(height=6, color="grey800"),
-
-                                # Visible Sunrise & Sunset Row
-                                ft.Row([
-                                    ft.Text(f"🌅 {d_sunrise}", size=11, color="amber100", weight=ft.FontWeight.W_500),
-                                    ft.Text(f"🌇 {d_sunset}", size=11, color="amber100", weight=ft.FontWeight.W_500),
-                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-
-                                ft.Divider(height=4, color="grey800"),
+                                # Sun & Moon Timing Box
+                                ft.Container(
+                                    content=ft.Column([
+                                        ft.Row([
+                                            ft.Text(f"🌅 {d_sunrise}", size=11, color="amber100", weight=ft.FontWeight.W_500),
+                                            ft.Text(f"🌇 {d_sunset}", size=11, color="amber100", weight=ft.FontWeight.W_500),
+                                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                        ft.Row([
+                                            ft.Text(f"🌕 {d_moonrise}", size=11, color="cyan200", weight=ft.FontWeight.W_500),
+                                            ft.Text(f"🌑 {d_moonset}", size=11, color="cyan200", weight=ft.FontWeight.W_500),
+                                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                    ], spacing=3),
+                                    bgcolor="#1c1f26",
+                                    padding=ft.Padding(8, 5, 8, 5),
+                                    border_radius=6,
+                                ),
 
                                 # Day Outlook
                                 ft.Row([
-                                    ft.Icon(ft.Icons.WB_SUNNY, size=18, color="amber300"),
+                                    ft.Icon(ft.Icons.WB_SUNNY, size=15, color="amber300"),
                                     ft.Text(f"{day.get('day_summary', '')}", size=11, color="grey200", expand=True),
                                 ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.START),
 
                                 # Night Outlook
                                 ft.Row([
-                                    ft.Icon(ft.Icons.NIGHTLIGHT_ROUND, size=18, color="lightblue"),
+                                    ft.Icon(ft.Icons.NIGHTLIGHT_ROUND, size=15, color="lightblue"),
                                     ft.Text(f"{day.get('night_summary', '')}", size=11, color="grey300", expand=True),
                                 ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.START),
 
+                                ft.Divider(height=2, color="transparent"),
+
+                                # Dedicated Precipitation Badge at the Bottom
+                                ft.Container(
+                                    content=ft.Row([
+                                        ft.Icon(ft.Icons.WATER_DROP, size=13, color=prob_color),
+                                        ft.Text(f"Rain Chance: {rain_pct}%", size=12, color=prob_color, weight=ft.FontWeight.BOLD),
+                                    ], alignment=ft.MainAxisAlignment.CENTER, spacing=5),
+                                    bgcolor="#1c1f26",
+                                    padding=ft.Padding(8, 4, 8, 4),
+                                    border_radius=6,
+                                ),
+
                             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6),
                             width=240,
-                            height=360,
                             padding=12,
                             border_radius=10,
                             bgcolor="#252830",
@@ -783,8 +852,10 @@ def main(page: ft.Page):
             # Metrics Row 1: Humidity, Wind, AQI, UV
             ft.Row([humidity_text, wind_text, aqi_badge, uv_badge], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             
-            # Metrics Row 2: Restored Clean Sunrise & Sunset
-            ft.Row([sunrise_text, sunset_text], alignment=ft.MainAxisAlignment.CENTER, spacing=30),
+            ft.Divider(height=6, color=ft.Colors.TRANSPARENT),
+            # Metrics Row 2: Clean Sun & Moon Timings
+            ft.Row([sunrise_text, sunset_text], alignment=ft.MainAxisAlignment.CENTER, spacing=25),
+            ft.Row([moonrise_text, moonset_text], alignment=ft.MainAxisAlignment.CENTER, spacing=25),
             
             ft.Divider(height=8, color=ft.Colors.TRANSPARENT),
             

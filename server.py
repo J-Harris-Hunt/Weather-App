@@ -157,6 +157,9 @@ def build_synthesized_weather(lat: float, lon: float, location_name: str):
         l_val = base_lows[i]
         r_val = base_rains[i]
 
+        d_rain_day = r_val
+        d_rain_night = max(5, round(r_val * 0.4))
+
         if r_val >= 40:
             d_sum = f"Partly cloudy with scattered afternoon showers ({r_val}%), high of {h_val}°F."
             n_sum = f"Comfortable evening with isolated showers, low around {l_val}°F."
@@ -169,6 +172,8 @@ def build_synthesized_weather(lat: float, lon: float, location_name: str):
             "high": h_val,
             "low": l_val,
             "rain_prob_max": r_val,
+            "day_rain_prob": d_rain_day,
+            "night_rain_prob": d_rain_night,
             "sunrise": current_sunrise,
             "sunset": current_sunset,
             "moon_rise": m_rise_str,
@@ -310,11 +315,16 @@ def get_weather(query: str = "28401", sport_team: str = "Panthers, Braves"):
                     s_r = datetime.fromisoformat(sunrises[i]).strftime("%I:%M %p").lstrip("0") if i < len(sunrises) else c_sunrise
                     s_s = datetime.fromisoformat(sunsets[i]).strftime("%I:%M %p").lstrip("0") if i < len(sunsets) else c_sunset
 
+                    d_rain_day = r_val
+                    d_rain_night = max(5, round(r_val * 0.4))
+
                     daily_list.append({
                         "date": f"{day_name} ({d_str})",
                         "high": h_val,
                         "low": l_val,
                         "rain_prob_max": r_val,
+                        "day_rain_prob": d_rain_day,
+                        "night_rain_prob": d_rain_night,
                         "sunrise": s_r, "sunset": s_s,
                         "moon_rise": f"{max(1, round((7.5 + i*0.75)%12)):02.0f}:20 PM",
                         "moon_set": f"{max(1, round((6.5 + i*0.75)%12)):02.0f}:35 AM",
@@ -343,7 +353,6 @@ def get_weather(query: str = "28401", sport_team: str = "Panthers, Braves"):
 
         m_phase, m_illum = calculate_moon(datetime.now())
 
-        # Regional Coastal / Inland Logic
         is_coastal = (lon >= -78.3 and 33.5 <= lat <= 36.5)
         if is_coastal:
             coastal_status = f"Sector: {location_name} (Coastal Waters Active). Water Temp: 78°F. Surf: 2-3 ft swell."
@@ -363,7 +372,6 @@ def get_weather(query: str = "28401", sport_team: str = "Panthers, Braves"):
             frizz_advice = f"Low frizz risk (Humidity {hum_val}%). Dry air styling holds well; light nourishing oil suggested."
             makeup_advice = "Hydrating liquid foundation and rich moisturizer advised for lower humidity levels."
 
-        # Upgraded Active Sports with Real Schedule & Opponent Weather
         active_sports = [
             {
                 "title": "Carolina Panthers (NFL)", 
@@ -409,7 +417,7 @@ def get_weather(query: str = "28401", sport_team: str = "Panthers, Braves"):
             "outdoor_activities": {
                 "fishing": {
                     "score": 88, 
-                    "details": "Major Feeding: 6:45 AM – 8:45 AM (Dawn & moving tide). Minor: 1:15 PM – 2:30 PM. Inshore target: Red Drum, Flounder, Speckled Trout."
+                    "details": "Major Feeding: 6:45 AM – 8:45 AM (Dawn & moving tide). Minor Feeding: 1:15 PM – 2:30 PM. Inshore Targets: Red Drum, Flounder, Speckled Trout."
                 },
                 "swimming": {
                     "score": 82, 
