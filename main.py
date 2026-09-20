@@ -50,6 +50,7 @@ def main(page: ft.Page):
     )
 
     condition_text = ft.Text("Loading weather data...", size=18, weight=ft.FontWeight.BOLD, color="amber200")
+    hero_weather_icon = ft.Icon(ft.Icons.WB_SUNNY, size=64, color="amber300")
     curr_temp_text = ft.Text("--°F", size=48, weight=ft.FontWeight.BOLD, color="white")
     feels_like_text = ft.Text("Feels Like: --°F", size=14, color="grey300")
     humidity_text = ft.Text("Humidity: --%", size=13, color="cyan200")
@@ -57,7 +58,7 @@ def main(page: ft.Page):
     uv_badge = ft.Text("UV: --", size=13, color="green300", weight=ft.FontWeight.BOLD)
     aqi_badge = ft.Text("AQI: --", size=13, color="green300", weight=ft.FontWeight.BOLD)
     
-    # Restored Main Area Sunrise, Sunset, Moonrise, Moonset Controls
+    # Sun and Moon Metrics Controls
     sunrise_text = ft.Text("🌅 Sunrise: --:-- AM", size=13, color="amber200", weight=ft.FontWeight.W_600)
     sunset_text = ft.Text("🌇 Sunset: --:-- PM", size=13, color="amber200", weight=ft.FontWeight.W_600)
     moonrise_text = ft.Text("🌕 Moonrise: --:-- PM", size=13, color="cyan200", weight=ft.FontWeight.W_600)
@@ -91,7 +92,7 @@ def main(page: ft.Page):
     forecast_container = ft.Container(
         content=forecast_row,
         padding=12,
-        height=310,
+        height=370,
         bgcolor="surfaceContainerHigh",
         border_radius=10,
     )
@@ -493,8 +494,8 @@ def main(page: ft.Page):
             content=ft.Column([
                 ft.Text(f"High: {day_data.get('high', '--')}°F | Low: {day_data.get('low', '--')}°F", weight=ft.FontWeight.BOLD, color="amber200"),
                 ft.Divider(),
-                ft.Text(f"Daytime: {day_data.get('day_summary', 'No summary available')}"),
-                ft.Text(f"Nighttime: {day_data.get('night_summary', 'No summary available')}"),
+                ft.Text(f"Daytime: {day_data.get('day_summary', 'No summary available')} (Precip: {day_data.get('day_rain_prob', 0)}%)"),
+                ft.Text(f"Nighttime: {day_data.get('night_summary', 'No summary available')} (Precip: {day_data.get('night_rain_prob', 0)}%)"),
                 ft.Divider(),
                 ft.Row([
                     ft.Text(f"🌅 Rise: {day_data.get('sunrise', '--')}", size=12, color="amber200"),
@@ -548,6 +549,15 @@ def main(page: ft.Page):
                     f_val = str(feels_raw)
                 else:
                     f_val = curr.get('temp', '--')
+
+                # Dynamic Sun vs Moon icon based on is_night
+                is_night_time = curr.get("is_night", False) or datetime.now().hour < 7 or datetime.now().hour >= 19
+                if is_night_time:
+                    hero_weather_icon.name = ft.Icons.NIGHTLIGHT_ROUND
+                    hero_weather_icon.color = "cyan200"
+                else:
+                    hero_weather_icon.name = ft.Icons.WB_SUNNY
+                    hero_weather_icon.color = "amber300"
 
                 # Update Full App Current Status
                 condition_text.value = condition
@@ -603,7 +613,7 @@ def main(page: ft.Page):
 
                     is_night = item.get("is_night", False) or ("PM" in str(h_time) and int(str(h_time).split()[0]) >= 7) or ("AM" in str(h_time) and int(str(h_time).split()[0]) <= 6)
                     h_icon = ft.Icons.NIGHTLIGHT_ROUND if is_night else ft.Icons.WB_SUNNY
-                    h_icon_color = "lightblue" if is_night else "amber300"
+                    h_icon_color = "cyan200" if is_night else "amber300"
 
                     hour_cards.append(
                         ft.Container(
@@ -631,6 +641,11 @@ def main(page: ft.Page):
                     rain_pct = day.get("rain_prob_max", 0)
                     prob_color = "cyan300" if rain_pct >= 30 else "grey400"
                     
+                    day_rain = day.get("day_rain_prob", rain_pct)
+                    night_rain = day.get("night_rain_prob", max(5, round(rain_pct * 0.4)))
+                    day_rain_color = "cyan300" if day_rain >= 30 else "grey400"
+                    night_rain_color = "cyan300" if night_rain >= 30 else "grey400"
+                    
                     d_sunrise = day.get("sunrise", s_rise_val)
                     d_sunset = day.get("sunset", s_set_val)
                     d_moonrise = day.get("moon_rise", "--")
@@ -644,7 +659,7 @@ def main(page: ft.Page):
                                 # Date Title
                                 ft.Text(day.get("date", ""), size=13, weight=ft.FontWeight.BOLD, color="amber200", text_align=ft.TextAlign.CENTER),
                                 
-                                # High & Low Temperatures Only
+                                # High & Low Temperatures
                                 ft.Container(
                                     content=ft.Row([
                                         ft.Row([
@@ -678,28 +693,46 @@ def main(page: ft.Page):
                                     border_radius=6,
                                 ),
 
-                                # Day Outlook
-                                ft.Row([
-                                    ft.Icon(ft.Icons.WB_SUNNY, size=15, color="amber300"),
-                                    ft.Text(f"{day.get('day_summary', '')}", size=11, color="grey200", expand=True),
-                                ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.START),
+                                # Day Section: Description + Day Precip %
+                                ft.Column([
+                                    ft.Row([
+                                        ft.Row([
+                                            ft.Icon(ft.Icons.WB_SUNNY, size=14, color="amber300"),
+                                            ft.Text("Daytime", size=11, weight=ft.FontWeight.BOLD, color="amber200"),
+                                        ], spacing=4),
+                                        ft.Row([
+                                            ft.Icon(ft.Icons.WATER_DROP, size=11, color=day_rain_color),
+                                            ft.Text(f"{day_rain}%", size=11, color=day_rain_color, weight=ft.FontWeight.BOLD),
+                                        ], spacing=2),
+                                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                    ft.Text(f"{day.get('day_summary', '')}", size=11, color="grey200"),
+                                ], spacing=3),
 
-                                # Night Outlook
-                                ft.Row([
-                                    ft.Icon(ft.Icons.NIGHTLIGHT_ROUND, size=15, color="lightblue"),
-                                    ft.Text(f"{day.get('night_summary', '')}", size=11, color="grey300", expand=True),
-                                ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.START),
+                                # Night Section: Description + Night Precip %
+                                ft.Column([
+                                    ft.Row([
+                                        ft.Row([
+                                            ft.Icon(ft.Icons.NIGHTLIGHT_ROUND, size=14, color="cyan200"),
+                                            ft.Text("Nighttime", size=11, weight=ft.FontWeight.BOLD, color="cyan200"),
+                                        ], spacing=4),
+                                        ft.Row([
+                                            ft.Icon(ft.Icons.WATER_DROP, size=11, color=night_rain_color),
+                                            ft.Text(f"{night_rain}%", size=11, color=night_rain_color, weight=ft.FontWeight.BOLD),
+                                        ], spacing=2),
+                                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                    ft.Text(f"{day.get('night_summary', '')}", size=11, color="grey300"),
+                                ], spacing=3),
 
                                 ft.Divider(height=2, color="transparent"),
 
-                                # Dedicated Precipitation Badge at the Bottom
+                                # Anchored 24h Total Rain Badge
                                 ft.Container(
                                     content=ft.Row([
-                                        ft.Icon(ft.Icons.WATER_DROP, size=13, color=prob_color),
-                                        ft.Text(f"Rain Chance: {rain_pct}%", size=12, color=prob_color, weight=ft.FontWeight.BOLD),
+                                        ft.Icon(ft.Icons.UMBRELLA, size=13, color=prob_color),
+                                        ft.Text(f"Total 24-Hour Rain Chance: {rain_pct}%", size=11, color=prob_color, weight=ft.FontWeight.BOLD),
                                     ], alignment=ft.MainAxisAlignment.CENTER, spacing=5),
                                     bgcolor="#1c1f26",
-                                    padding=ft.Padding(8, 4, 8, 4),
+                                    padding=ft.Padding(8, 5, 8, 5),
                                     border_radius=6,
                                 ),
 
@@ -737,9 +770,9 @@ def main(page: ft.Page):
             begin=ft.Alignment(-0.8, -1.0),
             end=ft.Alignment(1.0, 1.0),
             colors=[
-                "#1a2639",  # Deep twilight navy
-                "#16202c",  # Misty obsidian
-                "#2b211a",  # Warm volumetric sun glow at bottom
+                "#1a2639",
+                "#16202c",
+                "#2b211a",
             ]
         ),
         border=ft.Border(
@@ -842,7 +875,7 @@ def main(page: ft.Page):
             ft.Column([
                 condition_text,
                 ft.Row([
-                    ft.Icon(ft.Icons.WB_SUNNY, size=64, color="amber300"),
+                    hero_weather_icon,
                     curr_temp_text,
                 ], spacing=20, alignment=ft.MainAxisAlignment.CENTER),
                 feels_like_text,
@@ -853,7 +886,7 @@ def main(page: ft.Page):
             ft.Row([humidity_text, wind_text, aqi_badge, uv_badge], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             
             ft.Divider(height=6, color=ft.Colors.TRANSPARENT),
-            # Metrics Row 2: Clean Sun & Moon Timings
+            # Metrics Row 2: Sun & Moon Timings
             ft.Row([sunrise_text, sunset_text], alignment=ft.MainAxisAlignment.CENTER, spacing=25),
             ft.Row([moonrise_text, moonset_text], alignment=ft.MainAxisAlignment.CENTER, spacing=25),
             
