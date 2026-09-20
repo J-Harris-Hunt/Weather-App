@@ -33,12 +33,12 @@ def main(page: ft.Page):
     is_widget_mode = [False]
 
     # --- 2x2 Realistic Widget Controls ---
-    widget_loc_text = ft.Text("Wilmington, NC (28401)", size=13, weight=ft.FontWeight.W_600, color="amber200")
+    widget_loc_text = ft.Text("Wilmington, NC (28412)", size=13, weight=ft.FontWeight.W_600, color="amber200")
     widget_condition_text = ft.Text("Clear Sky", size=14, color="grey300", weight=ft.FontWeight.W_500)
-    widget_temp_text = ft.Text("75°", size=54, weight=ft.FontWeight.BOLD, color="white")
-    widget_hl_text = ft.Text("H: 88°  L: 69°", size=13, weight=ft.FontWeight.BOLD, color="amber100")
-    widget_rain_badge = ft.Text("💧 20% Precip", size=11, color="cyan200", weight=ft.FontWeight.BOLD)
-    widget_uv_badge = ft.Text("☀️ UV 5", size=11, color="orange200", weight=ft.FontWeight.BOLD)
+    widget_temp_text = ft.Text("77°", size=54, weight=ft.FontWeight.BOLD, color="white")
+    widget_hl_text = ft.Text("H: 84°  L: 71°", size=13, weight=ft.FontWeight.BOLD, color="amber100")
+    widget_rain_badge = ft.Text("💧 15% Precip", size=11, color="cyan200", weight=ft.FontWeight.BOLD)
+    widget_uv_badge = ft.Text("☀️ UV 0", size=11, color="orange200", weight=ft.FontWeight.BOLD)
     widget_aqi_badge = ft.Text("🍃 AQI 35 (Good)", size=11, color="green300", weight=ft.FontWeight.BOLD)
 
     # --- Full App Controls ---
@@ -50,8 +50,10 @@ def main(page: ft.Page):
         focused_border_color="amber200",
     )
 
+    # Prominent Location Label to verify active microclimate
+    location_display_text = ft.Text("📍 Wilmington (28412 / Lords Creek), NC", size=14, color="cyan200", weight=ft.FontWeight.W_600)
     condition_text = ft.Text("Loading weather data...", size=18, weight=ft.FontWeight.BOLD, color="amber200")
-    hero_weather_icon = ft.Icon(ft.Icons.WB_SUNNY, size=64, color="amber300")
+    hero_weather_icon = ft.Icon(ft.Icons.NIGHTLIGHT_ROUND, size=64, color="cyan200")
     curr_temp_text = ft.Text("--°F", size=48, weight=ft.FontWeight.BOLD, color="white")
     feels_like_text = ft.Text("Feels Like: --°F", size=14, color="grey300")
     humidity_text = ft.Text("Humidity: --%", size=13, color="cyan200")
@@ -528,7 +530,7 @@ def main(page: ft.Page):
 
     # --- Load Data from Render Backend ---
     def load_weather(e=None):
-        loc = location_input.value.strip() or "28401"
+        loc = location_input.value.strip() or "28412"
         try:
             response = requests.get(f"{API_BASE}/weather?query={loc}", timeout=15)
             
@@ -537,8 +539,11 @@ def main(page: ft.Page):
                 latest_weather_data.clear()
                 latest_weather_data.update(res)
 
+                resolved_loc = res.get("location_name", f"Wilmington, NC ({loc})")
+                location_display_text.value = f"📍 {resolved_loc}"
+
                 curr = res.get("current", {})
-                condition = curr.get("condition", "Clear")
+                condition = curr.get("condition", "Partly cloudy")
                 
                 temp_raw = curr.get('temp')
                 t_val = temp_raw.get('val', '--') if isinstance(temp_raw, dict) else (temp_raw if temp_raw is not None else '--')
@@ -590,7 +595,7 @@ def main(page: ft.Page):
                 rain_duration_text.value = rain_dur if rain_dur else "No immediate rain expected."
 
                 # Update 2x2 Realistic Widget Controls
-                widget_loc_text.value = res.get("location_name", f"Wilmington, NC ({loc})")
+                widget_loc_text.value = resolved_loc
                 widget_condition_text.value = condition
                 widget_temp_text.value = f"{t_val}°"
                 widget_uv_badge.value = f"☀️ UV {curr.get('uv_index', '--')}"
@@ -757,6 +762,7 @@ def main(page: ft.Page):
         except Exception as ex:
             condition_text.value = f"Connection Error: {ex}"
             page.update()
+            
     location_input.on_submit = load_weather
 
     # --- 2x2 Photorealistic Widget Component ---
@@ -874,6 +880,7 @@ def main(page: ft.Page):
     current_weather_card = ft.Container(
         content=ft.Column([
             ft.Column([
+                location_display_text,
                 condition_text,
                 ft.Row([
                     hero_weather_icon,
