@@ -1,6 +1,6 @@
 {
   "name": "Thick Moose Weather",
-  "short_name": "Thick Moose",
+  "short_name": "Thick Moose Weather",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#16202c",

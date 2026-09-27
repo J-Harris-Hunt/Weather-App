@@ -12,6 +12,28 @@ async def main(page: ft.Page):
     latest_weather_data = {}
     current_selected_category = ["weather_climate"]
 
+    # In-App App Bar / Hero Branding
+    app_header = ft.Container(
+        content=ft.Row([
+            ft.Container(
+                content=ft.Image(
+                    src="/icons/Icon-192.png",
+                    width=48,
+                    height=48,
+                    fit=ft.ImageFit.COVER,
+                    border_radius=24,
+                ),
+                border=ft.Border.all(2, "amber300"),
+                border_radius=26,
+            ),
+            ft.Column([
+                ft.Text("Thick Moose Weather", size=20, weight=ft.FontWeight.BOLD, color="amber300"),
+                ft.Text("Hyper-Local Microclimate Intelligence", size=11, color="cyan200", weight=ft.FontWeight.W_500),
+            ], spacing=1),
+        ], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        padding=ft.Padding(0, 4, 0, 10),
+    )
+
     # 2x2 Realistic Widget Controls
     widget_loc_text = ft.Text("Wilmington (28412 / Lords Creek), NC", size=13, weight=ft.FontWeight.W_600, color="amber200")
     widget_condition_text = ft.Text("Sunny", size=14, color="grey300", weight=ft.FontWeight.W_500)
@@ -31,7 +53,7 @@ async def main(page: ft.Page):
         focused_border_color="amber200",
     )
 
-    # Sports Custom Team Input Bar (Dedicated for Sporting Events Tab)
+    # Sports Custom Team Input Bar
     sports_input = ft.TextField(
         label="Enter Teams (e.g. Panthers, Braves, Wolfpack)",
         value="Panthers, Braves",
@@ -116,7 +138,6 @@ async def main(page: ft.Page):
         cards = []
         cat_data = latest_weather_data.get(category_key, {})
 
-        # If Sporting Events, add the team search bar at the very top of the category
         if category_key == "sporting_event":
             search_box = ft.Container(
                 content=ft.Row([
@@ -134,7 +155,6 @@ async def main(page: ft.Page):
         for key, val in cat_data.items():
             title = key.replace("_", " ").title()
 
-            # Outdoor Activities Cards (Score + Details with proper multiline wrap)
             if isinstance(val, dict) and "score" in val:
                 score = val.get("score", "--")
                 details = val.get("details", "")
@@ -154,7 +174,6 @@ async def main(page: ft.Page):
                 )
                 cards.append(card)
 
-            # Clothing Recommendations Card (Clean badge per time of day)
             elif key == "clothing" and isinstance(val, dict):
                 clothing_rows = [
                     ft.Text("Clothing Recommendations", size=15, weight=ft.FontWeight.BOLD, color="amber300"),
@@ -175,7 +194,6 @@ async def main(page: ft.Page):
                     )
                 cards.append(ft.Container(content=ft.Column(clothing_rows, spacing=8), bgcolor="#252830", border_radius=8, padding=12))
 
-            # Hair & Makeup
             elif key == "hair_makeup" and isinstance(val, dict):
                 hm_items = [
                     ft.Text("Hair & Makeup Outlook", size=15, weight=ft.FontWeight.BOLD, color="amber300"),
@@ -190,7 +208,6 @@ async def main(page: ft.Page):
                     )
                 cards.append(ft.Container(content=ft.Column(hm_items, spacing=6), bgcolor="#252830", border_radius=8, padding=12))
 
-            # Sporting Events List
             elif key == "events" and isinstance(val, list):
                 event_cards = [
                     ft.Text("Tracked Game Day Weather", size=15, weight=ft.FontWeight.BOLD, color="amber300"),
@@ -212,7 +229,6 @@ async def main(page: ft.Page):
                     )
                 cards.append(ft.Container(content=ft.Column(event_cards, spacing=8), bgcolor="#252830", border_radius=8, padding=12))
 
-            # Sowing & Planting Calendar
             elif key == "planting_harvest" and isinstance(val, list):
                 plant_items = [
                     ft.Text("Planting & Harvest Calendar", size=15, weight=ft.FontWeight.BOLD, color="amber300"),
@@ -236,7 +252,6 @@ async def main(page: ft.Page):
                     )
                 cards.append(ft.Container(content=ft.Column(plant_items, spacing=8), bgcolor="#252830", border_radius=8, padding=12))
 
-            # Celestial Events List
             elif key == "celestial_events" and isinstance(val, list):
                 celest_items = [
                     ft.Text("Celestial Events & Passings", size=15, weight=ft.FontWeight.BOLD, color="amber300"),
@@ -258,7 +273,6 @@ async def main(page: ft.Page):
                     )
                 cards.append(ft.Container(content=ft.Column(celest_items, spacing=8), bgcolor="#252830", border_radius=8, padding=12))
 
-            # General Dicts / Strings
             elif isinstance(val, dict):
                 col = [ft.Text(title, size=15, weight=ft.FontWeight.BOLD, color="amber300"), ft.Divider(height=6, color="grey800")]
                 for sk, sv in val.items():
@@ -287,12 +301,7 @@ async def main(page: ft.Page):
                 )
         return cards
 
-    def render_active_category():
-        key = current_selected_category[0]
-        category_cards_column.controls = build_cards_for_category(key)
-        page.update()
-
-    def handle_category_click(e):
+    async def handle_category_click(e):
         cat_key = e.control.data
         current_selected_category[0] = cat_key
         for chip in category_buttons_row.controls:
@@ -300,7 +309,8 @@ async def main(page: ft.Page):
             chip.bgcolor = "amber400" if is_active else "#252830"
             chip.content.controls[1].color = "black" if is_active else "white"
             chip.content.controls[0].color = "black" if is_active else "amber200"
-        render_active_category()
+        category_cards_column.controls = build_cards_for_category(cat_key)
+        page.update()
 
     categories_list = [
         ("weather_climate", "Weather & Climate", ft.Icons.THERMOSTAT),
@@ -433,7 +443,7 @@ async def main(page: ft.Page):
                     )
                 )
             forecast_row.controls = day_cards
-            render_active_category()
+            category_cards_column.controls = build_cards_for_category(current_selected_category[0])
             page.update()
         except Exception as ex:
             condition_text.value = f"Error: {ex}"
@@ -475,6 +485,7 @@ async def main(page: ft.Page):
     )
 
     full_dashboard = ft.Column([
+        app_header,
         photorealistic_2x2_widget,
         ft.Divider(height=15, color="grey800"),
         ft.Row([
