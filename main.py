@@ -15,11 +15,11 @@ async def main(page: ft.Page):
     # 2x2 Realistic Widget Controls
     widget_loc_text = ft.Text("Wilmington (28412 / Lords Creek), NC", size=13, weight=ft.FontWeight.W_600, color="amber200")
     widget_condition_text = ft.Text("Clear", size=14, color="grey300", weight=ft.FontWeight.W_500)
-    widget_hero_icon = ft.Icon(ft.Icons.NIGHTLIGHT_ROUND, size=62, color="cyan200")
-    widget_temp_text = ft.Text("70°", size=54, weight=ft.FontWeight.BOLD, color="white")
+    widget_hero_icon = ft.Icon(ft.Icons.WB_SUNNY, size=62, color="amber300")
+    widget_temp_text = ft.Text("74°", size=54, weight=ft.FontWeight.BOLD, color="white")
     widget_hl_text = ft.Text("H: 82°  L: 68°", size=13, weight=ft.FontWeight.BOLD, color="amber100")
     widget_rain_badge = ft.Text("💧 10% Precip", size=11, color="cyan200", weight=ft.FontWeight.BOLD)
-    widget_uv_badge = ft.Text("☀️ UV 0", size=11, color="orange200", weight=ft.FontWeight.BOLD)
+    widget_uv_badge = ft.Text("☀️ UV 5", size=11, color="orange200", weight=ft.FontWeight.BOLD)
     widget_aqi_badge = ft.Text("🍃 AQI 32 (Good)", size=11, color="green300", weight=ft.FontWeight.BOLD)
 
     # Main App Controls
@@ -33,7 +33,7 @@ async def main(page: ft.Page):
 
     location_display_text = ft.Text("📍 Wilmington (28412 / Lords Creek), NC", size=14, color="cyan200", weight=ft.FontWeight.W_600)
     condition_text = ft.Text("Loading weather data...", size=18, weight=ft.FontWeight.BOLD, color="amber200")
-    hero_weather_icon = ft.Icon(ft.Icons.NIGHTLIGHT_ROUND, size=64, color="cyan200")
+    hero_weather_icon = ft.Icon(ft.Icons.WB_SUNNY, size=64, color="amber300")
     curr_temp_text = ft.Text("--°F", size=48, weight=ft.FontWeight.BOLD, color="white")
     feels_like_text = ft.Text("Feels Like: --°F", size=14, color="grey300")
     humidity_text = ft.Text("Humidity: --%", size=13, color="cyan200")
@@ -53,10 +53,58 @@ async def main(page: ft.Page):
     hourly_container = ft.Container(content=hourly_row, padding=10, height=175, bgcolor="surfaceContainerHigh", border_radius=10)
 
     forecast_row = ft.Row([], alignment=ft.MainAxisAlignment.START, spacing=14, scroll=ft.ScrollMode.ADAPTIVE)
-    forecast_container = ft.Container(content=forecast_row, padding=12, height=370, bgcolor="surfaceContainerHigh", border_radius=10)
+    forecast_container = ft.Container(content=forecast_row, padding=12, height=390, bgcolor="surfaceContainerHigh", border_radius=10)
 
     category_cards_row = ft.Row(wrap=True, spacing=14, run_spacing=14, vertical_alignment=ft.CrossAxisAlignment.START)
     category_display_container = ft.Container(content=category_cards_row, padding=15, bgcolor="surfaceContainerHigh", border_radius=10)
+
+    # 5-Day Detailed Click Modal
+    detail_dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("Detailed Day Outlook", size=16, weight=ft.FontWeight.BOLD, color="amber300"),
+        content=ft.Container(width=340, content=ft.Text("No details available")),
+        actions=[
+            ft.TextButton("Close", on_click=lambda e: close_dialog(e))
+        ],
+        actions_alignment=ft.MainAxisAlignment.END,
+    )
+    page.overlay.append(detail_dialog)
+
+    def close_dialog(e):
+        detail_dialog.open = False
+        page.update()
+
+    def show_day_details(day_info):
+        detail_dialog.title = ft.Text(day_info.get("date", "Day Forecast"), size=16, weight=ft.FontWeight.BOLD, color="amber300")
+        detail_dialog.content = ft.Container(
+            width=360,
+            content=ft.Column([
+                ft.Row([
+                    ft.Text(f"High: {day_info.get('high')}°F", size=15, color="red300", weight=ft.FontWeight.BOLD),
+                    ft.Text(f"Low: {day_info.get('low')}°F", size=15, color="blue300", weight=ft.FontWeight.BOLD),
+                    ft.Text(f"Max Rain: {day_info.get('rain_prob_max')}%", size=14, color="cyan300", weight=ft.FontWeight.BOLD),
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Divider(height=10, color="grey800"),
+                ft.Text("☀️ Daytime Outlook", size=13, weight=ft.FontWeight.BOLD, color="amber200"),
+                ft.Text(f"Rain Chance: {day_info.get('day_rain_prob')}%", size=12, color="cyan200"),
+                ft.Text(day_info.get("day_summary", "Partly cloudy with pleasant temperatures."), size=12, color="white"),
+                ft.Divider(height=10, color="grey800"),
+                ft.Text("🌙 Nighttime Outlook", size=13, weight=ft.FontWeight.BOLD, color="cyan200"),
+                ft.Text(f"Rain Chance: {day_info.get('night_rain_prob')}%", size=12, color="cyan200"),
+                ft.Text(day_info.get("night_summary", "Calm and clear skies overnight."), size=12, color="white"),
+                ft.Divider(height=10, color="grey800"),
+                ft.Row([
+                    ft.Text(f"🌅 Rise: {day_info.get('sunrise')}", size=11, color="amber100"),
+                    ft.Text(f"🌇 Set: {day_info.get('sunset')}", size=11, color="amber100"),
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Row([
+                    ft.Text(f"🌕 Moon: {day_info.get('moon_rise')}", size=11, color="cyan200"),
+                    ft.Text(f"🌑 Set: {day_info.get('moon_set')}", size=11, color="cyan200"),
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            ], spacing=6, tight=True)
+        )
+        detail_dialog.open = True
+        page.update()
 
     def create_subcat_cards(data_dict, category_key=""):
         cards = []
@@ -75,7 +123,7 @@ async def main(page: ft.Page):
                         ft.Row([ft.Text("🌕 Rise:", size=13, color="cyan200"), ft.Text(str(m_rise), size=13, color="white", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         ft.Row([ft.Text("🌑 Set:", size=13, color="cyan200"), ft.Text(str(m_set), size=13, color="white", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                     ], spacing=6),
-                    bgcolor="#252830", border_radius=8, padding=14, width=250,
+                    bgcolor="#252830", border_radius=8, padding=14, width=280,
                 )
             )
 
@@ -117,24 +165,24 @@ async def main(page: ft.Page):
                     content_col.append(ft.Row([ft.Text(f"{sk.replace('_', ' ').title()}:", size=12, color="grey300"), ft.Text(str(sv), size=12, color="white", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
                 cards.append(ft.Container(content=ft.Column(content_col, spacing=6), bgcolor="#252830", border_radius=8, padding=14, width=300))
             else:
-                cards.append(ft.Container(content=ft.Column([ft.Text(title, size=13, weight=ft.FontWeight.BOLD, color="amber200"), ft.Divider(height=6, color="grey800"), ft.Text(str(val), size=13, color="white")], spacing=4), bgcolor="#252830", border_radius=8, padding=14, width=270))
+                cards.append(ft.Container(content=ft.Column([ft.Text(title, size=13, weight=ft.FontWeight.BOLD, color="amber200"), ft.Divider(height=6, color="grey800"), ft.Text(str(val), size=13, color="white")], spacing=4), bgcolor="#252830", border_radius=8, padding=14, width=280))
         return cards
 
-    async def render_active_category():
+    def render_active_category():
         key = current_selected_category[0]
         cat_data = latest_weather_data.get(key, {})
         category_cards_row.controls = create_subcat_cards(cat_data, category_key=key)
         page.update()
 
-    async def on_category_click(cat_key):
+    def handle_category_click(e):
+        cat_key = e.control.data
         current_selected_category[0] = cat_key
         for chip in category_buttons_row.controls:
             is_active = (chip.data == cat_key)
             chip.bgcolor = "amber400" if is_active else "#252830"
             chip.content.controls[1].color = "black" if is_active else "white"
             chip.content.controls[0].color = "black" if is_active else "amber200"
-        page.update()
-        await render_active_category()
+        render_active_category()
 
     categories_list = [
         ("weather_climate", "Weather & Climate", ft.Icons.THERMOSTAT),
@@ -149,7 +197,7 @@ async def main(page: ft.Page):
         is_active = (key == "weather_climate")
         chip = ft.Container(
             data=key,
-            on_click=lambda e, k=key: on_category_click(k),
+            on_click=handle_category_click,
             ink=True,
             padding=ft.Padding(14, 8, 14, 8),
             border_radius=20,
@@ -176,7 +224,7 @@ async def main(page: ft.Page):
             location_display_text.value = f"📍 {name}"
             curr = res.get("current", {})
             condition = curr.get("condition", "Clear")
-            t_val = curr.get("temp", 70)
+            t_val = curr.get("temp", 74)
 
             is_night = curr.get("is_night", False) or datetime.now().hour < 7 or datetime.now().hour >= 19
             hero_weather_icon.name = ft.Icons.NIGHTLIGHT_ROUND if is_night else ft.Icons.WB_SUNNY
@@ -187,9 +235,9 @@ async def main(page: ft.Page):
             condition_text.value = condition
             curr_temp_text.value = f"{t_val}°F"
             feels_like_text.value = f"Feels Like: {t_val}°F"
-            humidity_text.value = f"Humidity: {curr.get('humidity', 84)}%"
-            wind_text.value = f"Wind: {curr.get('wind', 4)} mph"
-            uv_badge.value = f"UV: {curr.get('uv_index', 0.0)}"
+            humidity_text.value = f"Humidity: {curr.get('humidity', 65)}%"
+            wind_text.value = f"Wind: {curr.get('wind', 6)} mph"
+            uv_badge.value = f"UV: {curr.get('uv_index', 5.0)}"
 
             s_rise = curr.get("sunrise", "06:58 AM")
             s_set = curr.get("sunset", "07:10 PM")
@@ -230,10 +278,15 @@ async def main(page: ft.Page):
                 )
             hourly_row.controls = hourly_cards
 
+            # Clickable 5-Day Forecast Cards with Tap Indicator
             day_cards = []
             for day in daily_data:
                 day_cards.append(
                     ft.Container(
+                        data=day,
+                        on_click=lambda e: show_day_details(e.control.data),
+                        ink=True,
+                        tooltip="Tap for full day & night breakdown",
                         content=ft.Column([
                             ft.Text(day.get("date", ""), size=12, weight=ft.FontWeight.BOLD, color="amber200"),
                             ft.Container(
@@ -252,14 +305,14 @@ async def main(page: ft.Page):
                             ),
                             ft.Column([
                                 ft.Row([ft.Text("Day", size=11, color="amber200", weight=ft.FontWeight.BOLD), ft.Text(f"💧 {day.get('day_rain_prob')}%", size=11, color="cyan300", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                                ft.Text(day.get("day_summary", ""), size=11, color="grey300"),
+                                ft.Text(day.get("day_summary", ""), size=11, color="grey300", max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
                             ], spacing=2),
                             ft.Column([
                                 ft.Row([ft.Text("Night", size=11, color="cyan200", weight=ft.FontWeight.BOLD), ft.Text(f"💧 {day.get('night_rain_prob')}%", size=11, color="cyan300", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                                ft.Text(day.get("night_summary", ""), size=11, color="grey300"),
+                                ft.Text(day.get("night_summary", ""), size=11, color="grey300", max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
                             ], spacing=2),
                             ft.Container(
-                                content=ft.Row([ft.Icon(ft.Icons.UMBRELLA, size=12, color="cyan300"), ft.Text(f"Total 24h Rain Chance: {day.get('rain_prob_max')}%", size=11, color="cyan300", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
+                                content=ft.Row([ft.Icon(ft.Icons.TOUCH_APP, size=12, color="amber300"), ft.Text("Tap for details", size=10, color="amber300", weight=ft.FontWeight.W_500)], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
                                 bgcolor="#1c1f26", padding=4, border_radius=6,
                             )
                         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6),
@@ -267,7 +320,7 @@ async def main(page: ft.Page):
                     )
                 )
             forecast_row.controls = day_cards
-            await render_active_category()
+            render_active_category()
             page.update()
         except Exception as ex:
             condition_text.value = f"Error: {ex}"
@@ -296,7 +349,7 @@ async def main(page: ft.Page):
             ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
             ft.Row([
                 widget_temp_text,
-                ft.Container(content=widget_hero_icon, padding=10, border_radius=50, bgcolor="rgba(0, 229, 255, 0.12)")
+                ft.Container(content=widget_hero_icon, padding=10, border_radius=50, bgcolor="rgba(255, 193, 7, 0.12)")
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             widget_hl_text,
             ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
@@ -334,7 +387,7 @@ async def main(page: ft.Page):
         ft.Text("Hourly Forecast (Next 36 Hours)", size=15, weight=ft.FontWeight.BOLD, color="amber200"),
         hourly_container,
         ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
-        ft.Text("5-Day Forecast", size=15, weight=ft.FontWeight.BOLD, color="amber200"),
+        ft.Text("5-Day Forecast (Tap card for full details)", size=15, weight=ft.FontWeight.BOLD, color="amber200"),
         forecast_container,
         ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
         ft.Text("Activity & Lifestyle Outlook", size=15, weight=ft.FontWeight.BOLD, color="amber200"),
