@@ -1,3 +1,7 @@
+from contextlib import asynccontextmanager
+import flet as ft
+import flet.fastapi as flet_fastapi
+from main import main as flet_ui_main
 import os
 import requests
 import math
@@ -7,7 +11,13 @@ from fastapi import FastAPI, HTTPException
 
 load_dotenv()
 
-app = FastAPI(title="AeroCast Ultimate Weather & Climate Dispatcher")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await flet_fastapi.app_manager.start()
+    yield
+    await flet_fastapi.app_manager.shutdown()
+
+app = FastAPI(title="AeroCast Ultimate Weather & Climate Dispatcher", lifespan=lifespan)
 
 WMO_MAP = {
     0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
@@ -593,6 +603,9 @@ def get_weather(query: str = "28412", sport_team: str = "Panthers, Braves"):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# Mount interactive Flet web dashboard to the root URL ("/")
+app.mount("/", flet_fastapi.app(flet_ui_main))
 
 if __name__ == "__main__":
     import uvicorn
