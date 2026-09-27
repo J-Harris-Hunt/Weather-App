@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import flet as ft
 import flet.fastapi as flet_fastapi
 
@@ -48,7 +50,7 @@ def get_coordinates(query: str):
     return 34.1378, -77.9150, "Wilmington (28412 / Lords Creek), NC"
 
 def fetch_live_weather(lat: float, lon: float):
-    headers = {"User-Agent": "(AeroCastWeatherApp, contact@aerocast.io)"}
+    headers = {"User-Agent": "(ThickMooseWeatherApp, contact@thickmoose.io)"}
     try:
         pts = requests.get(f"https://api.weather.gov/points/{round(lat, 4)},{round(lon, 4)}", headers=headers, timeout=4).json()
         stn_url = pts.get("properties", {}).get("observationStations")
@@ -258,7 +260,25 @@ async def lifespan(app: FastAPI):
     yield
     await flet_fastapi.app_manager.shutdown()
 
-app = FastAPI(title="AeroCast Weather API", lifespan=lifespan)
+app = FastAPI(title="Thick Moose Weather API", lifespan=lifespan)
+
+# Directly serve icons, manifest, and favicon so browsers never get 404s
+assets_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "assets"))
+if os.path.exists(assets_dir):
+    app.mount("/static", StaticFiles(directory=assets_dir), name="static")
+
+    @app.get("/favicon.ico")
+    async def favicon():
+        fav = os.path.join(assets_dir, "favicon.png")
+        if os.path.exists(fav):
+            return FileResponse(fav)
+        return FileResponse(os.path.join(assets_dir, "moose.png"))
+
+    @app.get("/manifest.json")
+    async def manifest():
+        m_path = os.path.join(assets_dir, "manifest.json")
+        if os.path.exists(m_path):
+            return FileResponse(m_path)
 
 @app.get("/weather")
 def api_weather(query: str = "28412", sport_team: str = "Panthers, Braves"):
@@ -268,8 +288,7 @@ def api_weather(query: str = "28412", sport_team: str = "Panthers, Braves"):
         raise HTTPException(status_code=500, detail=str(e))
 
 from main import main as flet_ui_main
-assets_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "assets"))
-app.mount("/", flet_fastapi.app(flet_ui_main, assets_dir=assets_path))
+app.mount("/", flet_fastapi.app(flet_ui_main, assets_dir=assets_dir))
 
 if __name__ == "__main__":
     import uvicorn
