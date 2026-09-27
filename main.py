@@ -37,7 +37,7 @@ async def main(page: ft.Page):
     curr_temp_text = ft.Text("--°F", size=48, weight=ft.FontWeight.BOLD, color="white")
     feels_like_text = ft.Text("Feels Like: --°F", size=14, color="grey300")
     humidity_text = ft.Text("Humidity: --%", size=13, color="cyan200")
-    wind_text = ft.Wind = ft.Text("Wind: -- mph", size=13, color="cyan200")
+    wind_text = ft.Text("Wind: -- mph", size=13, color="cyan200")
     uv_badge = ft.Text("UV: --", size=13, color="green300", weight=ft.FontWeight.BOLD)
     aqi_badge = ft.Text("AQI: --", size=13, color="green300", weight=ft.FontWeight.BOLD)
     
@@ -166,7 +166,6 @@ async def main(page: ft.Page):
     async def load_weather(e=None):
         loc = location_input.value.strip() or "28412"
         try:
-            # Query server module directly for the full payload with zero circular import
             import server
             res = server.get_full_weather_data(loc)
             name = res.get("location_name", loc)
@@ -189,7 +188,7 @@ async def main(page: ft.Page):
             curr_temp_text.value = f"{t_val}°F"
             feels_like_text.value = f"Feels Like: {t_val}°F"
             humidity_text.value = f"Humidity: {curr.get('humidity', 84)}%"
-            wind.value = f"Wind: {curr.get('wind', 4)} mph"
+            wind_text.value = f"Wind: {curr.get('wind', 4)} mph"
             uv_badge.value = f"UV: {curr.get('uv_index', 0.0)}"
 
             s_rise = curr.get("sunrise", "06:58 AM")
@@ -215,7 +214,6 @@ async def main(page: ft.Page):
                 widget_hl_text.value = f"H: {first.get('high')}°  L: {first.get('low')}°"
                 widget_rain_badge.value = f"💧 {first.get('rain_prob_max')}% Precip"
 
-            # Hourly Cards
             hourly_cards = []
             for item in res.get("hourly_36", []):
                 h_is_night = item.get("is_night", False)
@@ -232,7 +230,6 @@ async def main(page: ft.Page):
                 )
             hourly_row.controls = hourly_cards
 
-            # 5-Day Forecast Cards
             day_cards = []
             for day in daily_data:
                 day_cards.append(
@@ -323,7 +320,7 @@ async def main(page: ft.Page):
                 ft.Row([hero_weather_icon, curr_temp_text], spacing=16, alignment=ft.MainAxisAlignment.CENTER),
                 feels_like_text,
                 ft.Divider(height=8, color=ft.Colors.TRANSPARENT),
-                ft.Row([humidity_text, wind, aqi_badge, uv_badge], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Row([humidity_text, wind_text, aqi_badge, uv_badge], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Divider(height=6, color=ft.Colors.TRANSPARENT),
                 ft.Row([sunrise_text, sunset_text], alignment=ft.MainAxisAlignment.CENTER, spacing=20),
                 ft.Row([moonrise_text, moonset_text], alignment=ft.MainAxisAlignment.CENTER, spacing=20),
@@ -351,3 +348,4 @@ async def main(page: ft.Page):
 
 if __name__ == "__main__":
     ft.app(target=main, view=ft.AppView.WEB_BROWSER)
+    
