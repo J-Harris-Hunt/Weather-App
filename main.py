@@ -228,7 +228,7 @@ async def main(page: ft.Page):
                                 ], expand=True),
                                 ft.Container(
                                     content=ft.Text(p.get("action", ""), size=11, color="white", weight=ft.FontWeight.BOLD),
-                                    bgcolor="#102a18", border=ft.border.all(1, "green400"), padding=ft.Padding(8, 4, 8, 4), border_radius=6
+                                    bgcolor="#102a18", border=ft.Border.all(1, "green400"), padding=ft.Padding(8, 4, 8, 4), border_radius=6
                                 )
                             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                             bgcolor="#1c1f26", padding=8, border_radius=6
