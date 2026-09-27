@@ -486,7 +486,7 @@ async def main(page: ft.Page):
 
     full_dashboard = ft.Column([
         app_header,
-        photorealistic_2x2_widget,
+        ft.Row([photorealistic_2x2_widget], alignment=ft.MainAxisAlignment.CENTER),
         ft.Divider(height=15, color="grey800"),
         ft.Row([
             location_input,
@@ -521,7 +521,7 @@ async def main(page: ft.Page):
         category_buttons_row,
         ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
         category_display_container,
-    ], width=750)
+    ], width=750, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
     page.add(full_dashboard)
     await load_weather()
