@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+import flet as ft
 import flet.fastapi as flet_fastapi
 
 load_dotenv()

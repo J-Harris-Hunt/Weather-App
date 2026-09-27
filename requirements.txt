@@ -6,4 +6,3 @@ twilio
 flet
 python-dotenv
 pydantic
-flet-fastapi
