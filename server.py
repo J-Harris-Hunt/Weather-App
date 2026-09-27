@@ -5,8 +5,6 @@ from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 import flet as ft
 import flet.fastapi as flet_fastapi
 
@@ -262,24 +260,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Thick Moose Weather API", lifespan=lifespan)
 
-# Directly serve icons, manifest, and favicon so browsers never get 404s
-assets_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "assets"))
-if os.path.exists(assets_dir):
-    app.mount("/static", StaticFiles(directory=assets_dir), name="static")
-
-    @app.get("/favicon.ico")
-    async def favicon():
-        fav = os.path.join(assets_dir, "favicon.png")
-        if os.path.exists(fav):
-            return FileResponse(fav)
-        return FileResponse(os.path.join(assets_dir, "moose.png"))
-
-    @app.get("/manifest.json")
-    async def manifest():
-        m_path = os.path.join(assets_dir, "manifest.json")
-        if os.path.exists(m_path):
-            return FileResponse(m_path)
-
 @app.get("/weather")
 def api_weather(query: str = "28412", sport_team: str = "Panthers, Braves"):
     try:
@@ -288,6 +268,9 @@ def api_weather(query: str = "28412", sport_team: str = "Panthers, Braves"):
         raise HTTPException(status_code=500, detail=str(e))
 
 from main import main as flet_ui_main
+assets_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "assets"))
+
+# Mount Flet application with assets directory attached
 app.mount("/", flet_fastapi.app(flet_ui_main, assets_dir=assets_dir))
 
 if __name__ == "__main__":

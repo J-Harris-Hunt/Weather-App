@@ -17,7 +17,7 @@ async def main(page: ft.Page):
         content=ft.Row([
             ft.Container(
                 content=ft.Image(
-                    src="/icons/Icon-192.png",
+                    src="/moose.png",
                     width=48,
                     height=48,
                     fit="cover",
