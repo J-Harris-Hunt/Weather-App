@@ -34,8 +34,36 @@ SPORTS_DB = {
 
 def get_coordinates(query: str):
     clean_q = str(query).strip()
+    
+    # 1. Direct GPS Lat/Lon coordinates from browser (e.g. "34.1378,-77.9150")
+    if "," in clean_q:
+        parts = [p.strip() for p in clean_q.split(",")]
+        try:
+            lat_f = float(parts[0])
+            lon_f = float(parts[1])
+            # Reverse-geocode to get friendly locality name
+            loc_label = f"Current Location ({round(lat_f, 2)}, {round(lon_f, 2)})"
+            try:
+                rev = requests.get(
+                    f"https://nominatim.openstreetmap.org/reverse?lat={lat_f}&lon={lon_f}&format=json",
+                    headers={"User-Agent": "ThickMooseWeatherApp/1.0"},
+                    timeout=3
+                ).json()
+                addr = rev.get("address", {})
+                city = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("suburb") or "Local Area"
+                state = addr.get("state", "")
+                loc_label = f"{city}, {state} (GPS)" if state else city
+            except Exception:
+                pass
+            return lat_f, lon_f, loc_label
+        except ValueError:
+            pass
+
+    # 2. Known local microclimate ZIP codes
     if clean_q in LOCAL_MICROCLIMATES:
         return LOCAL_MICROCLIMATES[clean_q]
+
+    # 3. 5-digit US ZIP geocoding fallback
     if clean_q.isdigit() and len(clean_q) == 5:
         try:
             r = requests.get(f"https://geocoding-api.open-meteo.com/v1/search?name={clean_q}&count=1&country=US&language=en&format=json", timeout=4).json()
@@ -45,6 +73,7 @@ def get_coordinates(query: str):
                 return float(t["latitude"]), float(t["longitude"]), f"{t.get('name', clean_q)}, {t.get('admin1', '')} ({clean_q})".strip(", ")
         except Exception:
             pass
+
     return 34.1378, -77.9150, "Wilmington (28412 / Lords Creek), NC"
 
 def fetch_live_weather(lat: float, lon: float):

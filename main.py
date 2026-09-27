@@ -54,6 +54,41 @@ async def main(page: ft.Page):
         focused_border_color="amber200",
     )
 
+    async def get_gps_location(e):
+        location_input.error_text = None
+        page.update()
+
+        js_code = """
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function(pos) {
+                    const coords = pos.coords.latitude.toFixed(4) + ',' + pos.coords.longitude.toFixed(4);
+                    // Send coordinates back to python by updating the textfield and dispatching enter
+                    const input = document.querySelector("input[aria-label*='Location']");
+                    if (input) {
+                        input.value = coords;
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+                    }
+                },
+                function(err) {
+                    alert('Location access denied or unavailable. Please enter a ZIP code.');
+                },
+                { timeout: 10000, enableHighAccuracy: true }
+            );
+        } else {
+            alert('Geolocation is not supported by your browser.');
+        }
+        """
+        await page.run_js(js_code)
+
+    gps_button = ft.IconButton(
+        icon=ft.Icons.MY_LOCATION,
+        icon_color="amber300",
+        tooltip="Use My Exact Location",
+        on_click=get_gps_location
+    )
+
     sports_input = ft.TextField(
         label="Enter Teams (e.g. Panthers, Braves, Wolfpack)",
         value="Panthers, Braves",
