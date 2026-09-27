@@ -32,38 +32,23 @@ SPORTS_DB = {
     "hurricanes": ("Carolina Hurricanes (NHL)", "Lenovo Center (Raleigh, NC)", "Thursday 7:00 PM", "68°F (Indoor Arena)")
 }
 
+def auto_detect_location():
+    """Detect approximate user location from network IP"""
+    try:
+        r = requests.get("https://ipapi.co/json/", timeout=3).json()
+        city = r.get("city", "Wilmington")
+        region = r.get("region_code", "NC")
+        postal = r.get("postal", "28412")
+        lat = float(r.get("latitude", 34.1378))
+        lon = float(r.get("longitude", -77.9150))
+        return postal, lat, lon, f"{city}, {region} ({postal})"
+    except Exception:
+        return "28412", 34.1378, -77.9150, "Wilmington (28412 / Lords Creek), NC"
+
 def get_coordinates(query: str):
     clean_q = str(query).strip()
-    
-    # 1. Direct GPS Lat/Lon coordinates from browser (e.g. "34.1378,-77.9150")
-    if "," in clean_q:
-        parts = [p.strip() for p in clean_q.split(",")]
-        try:
-            lat_f = float(parts[0])
-            lon_f = float(parts[1])
-            # Reverse-geocode to get friendly locality name
-            loc_label = f"Current Location ({round(lat_f, 2)}, {round(lon_f, 2)})"
-            try:
-                rev = requests.get(
-                    f"https://nominatim.openstreetmap.org/reverse?lat={lat_f}&lon={lon_f}&format=json",
-                    headers={"User-Agent": "ThickMooseWeatherApp/1.0"},
-                    timeout=3
-                ).json()
-                addr = rev.get("address", {})
-                city = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("suburb") or "Local Area"
-                state = addr.get("state", "")
-                loc_label = f"{city}, {state} (GPS)" if state else city
-            except Exception:
-                pass
-            return lat_f, lon_f, loc_label
-        except ValueError:
-            pass
-
-    # 2. Known local microclimate ZIP codes
     if clean_q in LOCAL_MICROCLIMATES:
         return LOCAL_MICROCLIMATES[clean_q]
-
-    # 3. 5-digit US ZIP geocoding fallback
     if clean_q.isdigit() and len(clean_q) == 5:
         try:
             r = requests.get(f"https://geocoding-api.open-meteo.com/v1/search?name={clean_q}&count=1&country=US&language=en&format=json", timeout=4).json()
@@ -73,7 +58,6 @@ def get_coordinates(query: str):
                 return float(t["latitude"]), float(t["longitude"]), f"{t.get('name', clean_q)}, {t.get('admin1', '')} ({clean_q})".strip(", ")
         except Exception:
             pass
-
     return 34.1378, -77.9150, "Wilmington (28412 / Lords Creek), NC"
 
 def fetch_live_weather(lat: float, lon: float):
@@ -178,9 +162,11 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
             })
 
     tonight_low = daily_list[0]["low"]
+    radar_url = f"https://www.rainviewer.com/map.html?loc={round(lat, 4)},{round(lon, 4)},8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=1&layer=radar&sm=1&sn=1"
 
     return {
         "lat": lat, "lon": lon, "location_name": location_name,
+        "radar_url": radar_url,
         "current": {
             "temp": curr_temp,
             "humidity": curr_hum,
@@ -298,8 +284,6 @@ def api_weather(query: str = "28412", sport_team: str = "Panthers, Braves"):
 
 from main import main as flet_ui_main
 assets_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "assets"))
-
-# Mount Flet application with assets directory attached
 app.mount("/", flet_fastapi.app(flet_ui_main, assets_dir=assets_dir))
 
 if __name__ == "__main__":

@@ -49,44 +49,9 @@ async def main(page: ft.Page):
     location_input = ft.TextField(
         label="Location (ZIP or City)",
         value="28412",
-        width=260,
+        width=240,
         border_color="amber300",
         focused_border_color="amber200",
-    )
-
-    async def get_gps_location(e):
-        location_input.error_text = None
-        page.update()
-
-        js_code = """
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                function(pos) {
-                    const coords = pos.coords.latitude.toFixed(4) + ',' + pos.coords.longitude.toFixed(4);
-                    // Send coordinates back to python by updating the textfield and dispatching enter
-                    const input = document.querySelector("input[aria-label*='Location']");
-                    if (input) {
-                        input.value = coords;
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
-                    }
-                },
-                function(err) {
-                    alert('Location access denied or unavailable. Please enter a ZIP code.');
-                },
-                { timeout: 10000, enableHighAccuracy: true }
-            );
-        } else {
-            alert('Geolocation is not supported by your browser.');
-        }
-        """
-        await page.run_js(js_code)
-
-    gps_button = ft.IconButton(
-        icon=ft.Icons.MY_LOCATION,
-        icon_color="amber300",
-        tooltip="Use My Exact Location",
-        on_click=get_gps_location
     )
 
     sports_input = ft.TextField(
@@ -115,6 +80,31 @@ async def main(page: ft.Page):
 
     current_precip_text = ft.Text("Precip Now: 0% | Next 24h Max: 0%", size=14, color="cyan300", weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
     rain_duration_text = ft.Text("Zero precipitation expected.", size=13, color="amber100", text_align=ft.TextAlign.CENTER)
+
+    # Interactive Live Doppler Radar Section
+    radar_map_btn = ft.ElevatedButton(
+        text="Open Full Interactive Radar",
+        icon=ft.Icons.RADAR,
+        style=ft.ButtonStyle(bgcolor="amber400", color="black"),
+        url="https://www.rainviewer.com/map.html?loc=34.1378,-77.9150,8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=1&layer=radar&sm=1&sn=1"
+    )
+
+    radar_container = ft.Container(
+        content=ft.Column([
+            ft.Row([
+                ft.Icon(ft.Icons.SATELLITE_ALT, color="cyan300", size=18),
+                ft.Text("Live High-Resolution Doppler Radar", size=14, weight=ft.FontWeight.BOLD, color="amber300"),
+            ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
+            ft.Text("Real-time cloud, rain & convective storm tracking", size=11, color="grey400", text_align=ft.TextAlign.CENTER),
+            ft.Container(height=6),
+            radar_map_btn,
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4),
+        bgcolor="#18202c",
+        border=ft.Border.all(1, "cyan800"),
+        border_radius=12,
+        padding=14,
+        alignment=ft.Alignment(0, 0)
+    )
 
     hourly_row = ft.Row([], spacing=10, scroll=ft.ScrollMode.ADAPTIVE)
     hourly_container = ft.Container(content=hourly_row, padding=10, height=175, bgcolor="surfaceContainerHigh", border_radius=10)
@@ -373,6 +363,13 @@ async def main(page: ft.Page):
 
     category_buttons_row = ft.Row(controls=category_chips, spacing=8, scroll=ft.ScrollMode.ADAPTIVE)
 
+    async def auto_detect_gps(e):
+        """Instant auto-detection via IP geolocation"""
+        import server
+        detected_zip, lat, lon, loc_label = server.auto_detect_location()
+        location_input.value = detected_zip
+        await load_weather()
+
     async def load_weather(e=None):
         loc = location_input.value.strip() or "28412"
         teams = sports_input.value.strip() or "Panthers, Braves"
@@ -388,6 +385,9 @@ async def main(page: ft.Page):
             curr = res.get("current", {})
             condition = curr.get("condition", "Sunny")
             t_val = curr.get("temp", 74)
+
+            # Update radar link to new coordinates
+            radar_map_btn.url = res.get("radar_url", radar_map_btn.url)
 
             is_night = curr.get("is_night", False)
             hero_weather_icon.name = ft.Icons.NIGHTLIGHT_ROUND if is_night else ft.Icons.WB_SUNNY
@@ -532,7 +532,6 @@ async def main(page: ft.Page):
 
     feedback_section = ft.Container(
         content=ft.Row([
-            # Suggestions and Praise Button
             ft.Container(
                 content=ft.Column([
                     ft.Text("📬 ✨", size=32, text_align=ft.TextAlign.CENTER),
@@ -548,7 +547,6 @@ async def main(page: ft.Page):
                 tooltip="Send suggestions or praise",
                 on_click=open_praise,
             ),
-            # Problems and Complaints (Perched on a Bear Trap)
             ft.Container(
                 content=ft.Column([
                     ft.Row([
@@ -578,7 +576,8 @@ async def main(page: ft.Page):
         ft.Divider(height=15, color="grey800"),
         ft.Row([
             location_input,
-            ft.IconButton(icon=ft.Icons.SEARCH, on_click=load_weather, icon_color="amber300")
+            ft.IconButton(icon=ft.Icons.SEARCH, on_click=load_weather, icon_color="amber300", tooltip="Search Location"),
+            ft.IconButton(icon=ft.Icons.MY_LOCATION, on_click=auto_detect_gps, icon_color="cyan300", tooltip="Auto-Detect My Location"),
         ], alignment=ft.MainAxisAlignment.CENTER),
         ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
         ft.Container(
@@ -598,6 +597,8 @@ async def main(page: ft.Page):
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4),
             padding=16, border_radius=10, bgcolor="surfaceContainerHigh"
         ),
+        ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+        radar_container,
         ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
         ft.Text("Hourly Forecast (Next 36 Hours)", size=15, weight=ft.FontWeight.BOLD, color="amber200"),
         hourly_container,
