@@ -4,5 +4,6 @@ requests
 apscheduler
 twilio
 flet
+flet-web
 python-dotenv
 pydantic
