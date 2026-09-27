@@ -12,39 +12,40 @@ async def main(page: ft.Page):
     latest_weather_data = {}
     current_selected_category = ["weather_climate"]
 
-    # In-App App Bar / Hero Branding
+    # Header with Moose image served directly from root assets
     app_header = ft.Container(
         content=ft.Row([
             ft.Container(
                 content=ft.Image(
                     src="/moose.png",
-                    width=48,
-                    height=48,
+                    width=54,
+                    height=54,
                     fit="cover",
-                    border_radius=24,
+                    border_radius=27,
+                    error_content=ft.Icon(ft.Icons.PETS, color="amber300", size=30),
                 ),
                 border=ft.Border.all(2, "amber300"),
-                border_radius=26,
+                border_radius=28,
             ),
             ft.Column([
-                ft.Text("Thick Moose Weather", size=20, weight=ft.FontWeight.BOLD, color="amber300"),
-                ft.Text("Hyper-Local Microclimate Intelligence", size=11, color="cyan200", weight=ft.FontWeight.W_500),
-            ], spacing=1),
+                ft.Text("Thick Moose Weather", size=22, weight=ft.FontWeight.BOLD, color="amber300"),
+                ft.Text("Hyper-Local Microclimate Intelligence", size=12, color="cyan200", weight=ft.FontWeight.W_500),
+            ], spacing=2),
         ], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        padding=ft.Padding(0, 4, 0, 10),
+        padding=ft.Padding(0, 10, 0, 16),
+        alignment=ft.Alignment(0, 0)
     )
 
-    # 2x2 Realistic Widget Controls
+    # 2x2 Photorealistic Widget Controls
     widget_loc_text = ft.Text("Wilmington (28412 / Lords Creek), NC", size=13, weight=ft.FontWeight.W_600, color="amber200")
     widget_condition_text = ft.Text("Sunny", size=14, color="grey300", weight=ft.FontWeight.W_500)
     widget_hero_icon = ft.Icon(ft.Icons.WB_SUNNY, size=62, color="amber300")
-    widget_temp_text = ft.Text("74°", size=54, weight=ft.FontWeight.BOLD, color="white")
+    widget_temp_text = ft.Text("79°", size=54, weight=ft.FontWeight.BOLD, color="white")
     widget_hl_text = ft.Text("H: 80°  L: 53°", size=13, weight=ft.FontWeight.BOLD, color="amber100")
     widget_rain_badge = ft.Text("💧 0% Precip", size=11, color="cyan200", weight=ft.FontWeight.BOLD)
     widget_uv_badge = ft.Text("☀️ UV 4", size=11, color="orange200", weight=ft.FontWeight.BOLD)
     widget_aqi_badge = ft.Text("🍃 AQI 32 (Good)", size=11, color="green300", weight=ft.FontWeight.BOLD)
 
-    # Location Input Bar
     location_input = ft.TextField(
         label="Location (ZIP or City)",
         value="28412",
@@ -53,7 +54,6 @@ async def main(page: ft.Page):
         focused_border_color="amber200",
     )
 
-    # Sports Custom Team Input Bar
     sports_input = ft.TextField(
         label="Enter Teams (e.g. Panthers, Braves, Wolfpack)",
         value="Panthers, Braves",
@@ -90,7 +90,6 @@ async def main(page: ft.Page):
     category_cards_column = ft.Column([], spacing=14)
     category_display_container = ft.Container(content=category_cards_column, padding=15, bgcolor="surfaceContainerHigh", border_radius=10)
 
-    # 5-Day Detailed Pop-up Modal
     detail_dialog = ft.AlertDialog(
         modal=True,
         title=ft.Text("Detailed Day Outlook", size=16, weight=ft.FontWeight.BOLD, color="amber300"),
@@ -452,8 +451,10 @@ async def main(page: ft.Page):
     location_input.on_submit = load_weather
     sports_input.on_submit = load_weather
 
+    # Perfectly Centered 2x2 Photorealistic Widget
     photorealistic_2x2_widget = ft.Container(
-        width=320, height=320, border_radius=28, padding=20,
+        width=330, height=330, border_radius=28, padding=20,
+        alignment=ft.Alignment(0, 0),
         gradient=ft.LinearGradient(
             begin=ft.Alignment(-0.8, -1.0), end=ft.Alignment(1.0, 1.0),
             colors=["#1a2639", "#16202c", "#2b211a"]
@@ -482,6 +483,58 @@ async def main(page: ft.Page):
                 ft.Container(content=widget_aqi_badge, bgcolor="rgba(76, 175, 80, 0.12)", padding=ft.Padding(8, 4, 8, 4), border_radius=10),
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
         ], spacing=4)
+    )
+
+    # Feedback & Contact Actions
+    praise_mailto = "mailto:thickmooseweather@gmail.com?subject=Thick%20Moose%20Weather%20-%20Suggestions%20%26%20Praise"
+    complaints_mailto = "mailto:thickmooseweather@gmail.com?subject=Thick%20Moose%20Weather%20-%20Problems%20%26%20Complaints"
+
+    async def open_praise(e):
+        await page.launch_url(praise_mailto)
+
+    async def open_complaints(e):
+        await page.launch_url(complaints_mailto)
+
+    feedback_section = ft.Container(
+        content=ft.Row([
+            # Suggestions and Praise Button
+            ft.Container(
+                content=ft.Column([
+                    ft.Text("📬 ✨", size=32, text_align=ft.TextAlign.CENTER),
+                    ft.Text("Suggestions & Praise", size=13, weight=ft.FontWeight.BOLD, color="amber300", text_align=ft.TextAlign.CENTER),
+                    ft.Text("Drop a friendly note", size=10, color="grey300", text_align=ft.TextAlign.CENTER),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=3),
+                bgcolor="#1c271e",
+                border=ft.Border.all(1.5, "green400"),
+                border_radius=14,
+                padding=12,
+                width=175,
+                ink=True,
+                tooltip="Send suggestions or praise",
+                on_click=open_praise,
+            ),
+            # Problems and Complaints (Perched on a Bear Trap)
+            ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Text("📦", size=24),
+                        ft.Text("⚙️💥", size=20),
+                    ], alignment=ft.MainAxisAlignment.CENTER, spacing=0),
+                    ft.Text("🪤 BEAR TRAP 🪤", size=9, weight=ft.FontWeight.BOLD, color="red300", text_align=ft.TextAlign.CENTER),
+                    ft.Text("Problems & Complaints", size=13, weight=ft.FontWeight.BOLD, color="red200", text_align=ft.TextAlign.CENTER),
+                    ft.Text("Proceed at your own risk", size=10, color="grey400", text_align=ft.TextAlign.CENTER),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
+                bgcolor="#2a1717",
+                border=ft.Border.all(1.5, "red400"),
+                border_radius=14,
+                padding=10,
+                width=175,
+                ink=True,
+                tooltip="Complain if you dare!",
+                on_click=open_complaints,
+            ),
+        ], alignment=ft.MainAxisAlignment.CENTER, spacing=16),
+        padding=ft.Padding(0, 16, 0, 30),
     )
 
     full_dashboard = ft.Column([
@@ -521,6 +574,8 @@ async def main(page: ft.Page):
         category_buttons_row,
         ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
         category_display_container,
+        ft.Divider(height=15, color="grey800"),
+        feedback_section,
     ], width=750, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
     page.add(full_dashboard)
