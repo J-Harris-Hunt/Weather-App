@@ -16,16 +16,16 @@ WMO_MAP = {
 }
 
 SPORTS_DB = {
-    "panthers": ("Carolina Panthers (NFL)", "Mercedes-Benz Stadium (Atlanta, GA)", "Sun Sep 20, 1:00 PM (at Falcons)", "78°F (Dome / Climate Controlled)"),
-    "carolina panthers": ("Carolina Panthers (NFL)", "Mercedes-Benz Stadium (Atlanta, GA)", "Sun Sep 20, 1:00 PM (at Falcons)", "78°F (Dome / Climate Controlled)"),
-    "braves": ("Atlanta Braves (MLB)", "Truist Park (Atlanta, GA)", "Today 7:20 PM vs Marlins", "77°F, Clear sky"),
-    "atlanta braves": ("Atlanta Braves (MLB)", "Truist Park (Atlanta, GA)", "Today 7:20 PM vs Marlins", "77°F, Clear sky"),
-    "wolfpack": ("NC State Wolfpack (NCAA)", "Carter-Finley Stadium (Raleigh, NC)", "Saturday 3:30 PM (ACC)", "82°F, Partly cloudy"),
-    "nc state": ("NC State Wolfpack (NCAA)", "Carter-Finley Stadium (Raleigh, NC)", "Saturday 3:30 PM (ACC)", "82°F, Partly cloudy"),
-    "tar heels": ("UNC Tar Heels (NCAA)", "Kenan Memorial Stadium (Chapel Hill, NC)", "Saturday 12:00 PM (ACC)", "79°F, Mostly sunny"),
-    "unc": ("UNC Tar Heels (NCAA)", "Kenan Memorial Stadium (Chapel Hill, NC)", "Saturday 12:00 PM (ACC)", "79°F, Mostly sunny"),
-    "duke": ("Duke Blue Devils (NCAA)", "Wallace Wade Stadium (Durham, NC)", "Saturday 7:00 PM (ACC)", "75°F, Clear sky"),
-    "hurricanes": ("Carolina Hurricanes (NHL)", "Lenovo Center (Raleigh, NC)", "Preseason Matchup 7:00 PM", "68°F (Indoor Arena)")
+    "panthers": ("Carolina Panthers (NFL)", "Bank of America Stadium (Charlotte, NC)", "Sun 1:00 PM", "76°F, Sunny"),
+    "carolina panthers": ("Carolina Panthers (NFL)", "Bank of America Stadium (Charlotte, NC)", "Sun 1:00 PM", "76°F, Sunny"),
+    "braves": ("Atlanta Braves (MLB)", "Truist Park (Atlanta, GA)", "Today 7:20 PM", "74°F, Clear sky"),
+    "atlanta braves": ("Atlanta Braves (MLB)", "Truist Park (Atlanta, GA)", "Today 7:20 PM", "74°F, Clear sky"),
+    "wolfpack": ("NC State Wolfpack (NCAA)", "Carter-Finley Stadium (Raleigh, NC)", "Saturday 3:30 PM", "80°F, Partly cloudy"),
+    "nc state": ("NC State Wolfpack (NCAA)", "Carter-Finley Stadium (Raleigh, NC)", "Saturday 3:30 PM", "80°F, Partly cloudy"),
+    "tar heels": ("UNC Tar Heels (NCAA)", "Kenan Memorial Stadium (Chapel Hill, NC)", "Saturday 12:00 PM", "78°F, Mostly sunny"),
+    "unc": ("UNC Tar Heels (NCAA)", "Kenan Memorial Stadium (Chapel Hill, NC)", "Saturday 12:00 PM", "78°F, Mostly sunny"),
+    "duke": ("Duke Blue Devils (NCAA)", "Wallace Wade Stadium (Durham, NC)", "Saturday 7:00 PM", "75°F, Clear sky"),
+    "hurricanes": ("Carolina Hurricanes (NHL)", "Lenovo Center (Raleigh, NC)", "Matchup 7:00 PM", "68°F (Indoor Arena)")
 }
 
 LOCAL_MICROCLIMATES = {
@@ -108,9 +108,9 @@ def fetch_live_nws(lat: float, lon: float):
                 temp_c = props.get("temperature", {}).get("value")
                 temp_f = round((temp_c * 9/5) + 32) if temp_c is not None else None
                 wind_kmh = props.get("windSpeed", {}).get("value")
-                wind_mph = round(wind_kmh * 0.621371, 1) if wind_kmh is not None else 5.0
+                wind_mph = round(wind_kmh * 0.621371, 1) if wind_kmh is not None else 6.0
                 rh = props.get("relativeHumidity", {}).get("value")
-                hum = round(rh, 1) if rh is not None else 84.0
+                hum = round(rh, 1) if rh is not None else 65.0
                 desc = props.get("textDescription") or "Clear"
                 
                 if temp_f is not None:
@@ -133,11 +133,10 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
         curr_wind = live_nws["wind"]
         curr_hum = live_nws["humidity"]
     else:
-        # High precision microclimate fallback
-        curr_temp = 70 if is_lords_creek else 69
+        curr_temp = 74 if is_lords_creek else 72
         curr_cond = "Clear sky"
-        curr_wind = 4.0
-        curr_hum = 84.0
+        curr_wind = 6.0
+        curr_hum = 65.0
 
     current_sunrise = "06:58 AM"
     current_sunset = "07:10 PM"
@@ -180,8 +179,8 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
     precip_summary = f"Precip Now: {hourly_36[0]['rain_chance']}% | Next 24h Max: {max_next_24}% (Peak around {peak_precip_time})"
 
     daily_list = []
-    base_highs = [82, 84, 86, 81, 78]
-    base_lows = [68, 69, 67, 65, 62]
+    base_highs = [82, 84, 85, 80, 78]
+    base_lows = [68, 67, 66, 64, 62]
     base_rains = [10, 5, 12, 35, 20]
 
     for i in range(5):
@@ -234,7 +233,7 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
     tide_status = "High Tide: 04:45 AM (+4.6ft) | Low Tide: 11:10 AM (-0.1ft)." if is_coastal else "N/A (Inland Location)."
     lake_desc = f"Lords Creek & Cape Fear Estuary near {location_name}: Calm waters, light current." if is_lords_creek else f"Inland Waterways near {location_name}: Calm waters, good surface visibility."
 
-    frizz_advice = f"High moisture absorption & frizz vulnerability (Humidity {curr_hum}%). Apply anti-humectant smoothing serum." if curr_hum >= 75 else f"Low frizz risk (Humidity {curr_hum}%). Light styling oil suggested."
+    frizz_advice = f"Moisture absorption & frizz vulnerability (Humidity {curr_hum}%). Apply anti-humectant smoothing serum." if curr_hum >= 75 else f"Low frizz risk (Humidity {curr_hum}%). Light styling oil suggested."
     makeup_advice = "Matte primer and setting spray recommended for high nocturnal humidity." if curr_hum >= 75 else "Hydrating foundation recommended."
 
     active_sports = [
@@ -288,11 +287,11 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
             },
             "swimming": {"score": 80, "details": "Water temperatures pleasant (~76°F)."},
             "beach": {"score": 85 if is_coastal else 40, "details": "Low rip current risk, clean 2 ft surf breakers." if is_coastal else "Inland sector."},
-            "running": {"score": 88, "details": "Comfortable nocturnal temperatures with calm breezes."},
-            "walking": {"score": 92, "details": "Prime walking conditions; light surface winds under 5 mph."},
+            "running": {"score": 88, "details": "Comfortable temperatures with light breezes."},
+            "walking": {"score": 92, "details": "Prime walking conditions; light surface winds under 10 mph."},
             "biking": {"score": 92, "details": "Dry roads, calm winds, and clear visibility."},
             "skiing": {"score": 5, "details": "Closed / Regional off-season across Appalachian resorts."},
-            "mowing": {"score": 85, "details": "Allow morning dew to burn off until ~10:00 AM before mowing."},
+            "mowing": {"score": 85, "details": "Favorable — Allow morning dew to dry before cutting."},
             "hunting": {"score": 90, "details": "Prime barometric stability. Active whitetail movement at sunrise."},
             "camping": {"score": 90, "details": "Prime — Overnight lows around 68°F; dry ground with calm winds."},
             "surfing": {"score": 75 if is_coastal else 10, "details": "2 ft clean surf with light offshore winds." if is_coastal else "N/A - Inland."},
@@ -307,7 +306,7 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
             },
             "leaf_change": "Status: Early transition (subtle 5% color shift in wetland maples).",
             "allergen": "Allergen Index: Low to Moderate (Ragweed active across regional corridors).",
-            "mosquito_fly": "Activity Index: Low during cool night hours; moderate at dusk.",
+            "mosquito_fly": "Activity Index: Low during morning; moderate at dusk.",
             "planting_harvest": [
                 {"item": "Kale & Spinach", "action": "Direct Sowing Window", "timing": "Optimal fall planting through October"},
                 {"item": "Fall Tomatoes", "action": "Harvesting Peak", "timing": "Active harvest through late autumn frost"},
@@ -322,22 +321,21 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
             "moon_set": daily_list[0]["moon_set"],
             "moon_phase": f"{m_phase} ({m_illum}% illumination)",
             "darkness_window": f"{current_sunset} to {current_sunrise}",
-            "stargazing_rating": "90/100 (Excellent) — Clear sky with crisp atmospheric seeing. Saturn prominent in the southern sky.",
+            "stargazing_rating": "90/100 (Excellent) — Clear sky with crisp atmospheric seeing.",
             "visible_planets": [
                 "Saturn (Prominent throughout the southern night sky)",
-                "Jupiter (Bright beacon in Predawn eastern sky)",
+                "Jupiter (Bright beacon in predawn eastern sky)",
                 "Venus (Brilliant in WSW evening twilight)",
                 "Mars (Visible in morning sky near Gemini)"
             ],
             "celestial_events": [
-                {"title": "🍂 Harvest Moon Cycle", "window": "Active tonight", "direction": "High Southern Sky", "notes": "Brilliant moon illuminating coastal waters"},
-                {"title": "🛰️ ISS Overhead Pass", "window": "Predawn", "direction": "WSW to ENE", "notes": "Visible naked-eye transit"}
+                {"title": "🍂 Autumn Stargazing Window", "window": "Active tonight", "direction": "High Southern Sky", "notes": "Clear conditions over coastal waters"},
+                {"title": "🛰️ ISS Overhead Pass", "window": "Evening", "direction": "WSW to ENE", "notes": "Visible naked-eye transit"}
             ]
         }
     }
 
 
-# Lifespan manager for Flet web hosting inside FastAPI
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await flet_fastapi.app_manager.start()
@@ -353,7 +351,6 @@ def api_weather(query: str = "28412", sport_team: str = "Panthers, Braves"):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Import main after definitions to avoid circular loading
 from main import main as flet_ui_main
 app.mount("/", flet_fastapi.app(flet_ui_main))
 
@@ -361,4 +358,3 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run("server:app", host="0.0.0.0", port=port)
-    
