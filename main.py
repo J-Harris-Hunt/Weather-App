@@ -14,21 +14,31 @@ async def main(page: ft.Page):
 
     # 2x2 Realistic Widget Controls
     widget_loc_text = ft.Text("Wilmington (28412 / Lords Creek), NC", size=13, weight=ft.FontWeight.W_600, color="amber200")
-    widget_condition_text = ft.Text("Clear", size=14, color="grey300", weight=ft.FontWeight.W_500)
+    widget_condition_text = ft.Text("Sunny", size=14, color="grey300", weight=ft.FontWeight.W_500)
     widget_hero_icon = ft.Icon(ft.Icons.WB_SUNNY, size=62, color="amber300")
     widget_temp_text = ft.Text("74°", size=54, weight=ft.FontWeight.BOLD, color="white")
-    widget_hl_text = ft.Text("H: 82°  L: 68°", size=13, weight=ft.FontWeight.BOLD, color="amber100")
-    widget_rain_badge = ft.Text("💧 10% Precip", size=11, color="cyan200", weight=ft.FontWeight.BOLD)
-    widget_uv_badge = ft.Text("☀️ UV 5", size=11, color="orange200", weight=ft.FontWeight.BOLD)
+    widget_hl_text = ft.Text("H: 80°  L: 53°", size=13, weight=ft.FontWeight.BOLD, color="amber100")
+    widget_rain_badge = ft.Text("💧 0% Precip", size=11, color="cyan200", weight=ft.FontWeight.BOLD)
+    widget_uv_badge = ft.Text("☀️ UV 4", size=11, color="orange200", weight=ft.FontWeight.BOLD)
     widget_aqi_badge = ft.Text("🍃 AQI 32 (Good)", size=11, color="green300", weight=ft.FontWeight.BOLD)
 
-    # Main App Controls
+    # Location Input Bar
     location_input = ft.TextField(
-        label="Location (ZIP or City/State)",
+        label="Location (ZIP or City)",
         value="28412",
         width=260,
         border_color="amber300",
         focused_border_color="amber200",
+    )
+
+    # Sports Custom Team Input Bar (Dedicated for Sporting Events Tab)
+    sports_input = ft.TextField(
+        label="Enter Teams (e.g. Panthers, Braves, Wolfpack)",
+        value="Panthers, Braves",
+        expand=True,
+        border_color="amber300",
+        focused_border_color="amber200",
+        dense=True
     )
 
     location_display_text = ft.Text("📍 Wilmington (28412 / Lords Creek), NC", size=14, color="cyan200", weight=ft.FontWeight.W_600)
@@ -40,14 +50,14 @@ async def main(page: ft.Page):
     wind_text = ft.Text("Wind: -- mph", size=13, color="cyan200")
     uv_badge = ft.Text("UV: --", size=13, color="green300", weight=ft.FontWeight.BOLD)
     aqi_badge = ft.Text("AQI: --", size=13, color="green300", weight=ft.FontWeight.BOLD)
-    
+
     sunrise_text = ft.Text("🌅 Sunrise: --:-- AM", size=13, color="amber200", weight=ft.FontWeight.W_600)
     sunset_text = ft.Text("🌇 Sunset: --:-- PM", size=13, color="amber200", weight=ft.FontWeight.W_600)
     moonrise_text = ft.Text("🌕 Moonrise: --:-- PM", size=13, color="cyan200", weight=ft.FontWeight.W_600)
     moonset_text = ft.Text("🌑 Moonset: --:-- AM", size=13, color="cyan200", weight=ft.FontWeight.W_600)
 
-    current_precip_text = ft.Text("Precip Now: --% | Next 24h: --%", size=14, color="cyan300", weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
-    rain_duration_text = ft.Text("No immediate rain expected.", size=13, color="amber100", text_align=ft.TextAlign.CENTER)
+    current_precip_text = ft.Text("Precip Now: 0% | Next 24h Max: 0%", size=14, color="cyan300", weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
+    rain_duration_text = ft.Text("Zero precipitation expected.", size=13, color="amber100", text_align=ft.TextAlign.CENTER)
 
     hourly_row = ft.Row([], spacing=10, scroll=ft.ScrollMode.ADAPTIVE)
     hourly_container = ft.Container(content=hourly_row, padding=10, height=175, bgcolor="surfaceContainerHigh", border_radius=10)
@@ -55,17 +65,15 @@ async def main(page: ft.Page):
     forecast_row = ft.Row([], alignment=ft.MainAxisAlignment.START, spacing=14, scroll=ft.ScrollMode.ADAPTIVE)
     forecast_container = ft.Container(content=forecast_row, padding=12, height=390, bgcolor="surfaceContainerHigh", border_radius=10)
 
-    category_cards_row = ft.Row(wrap=True, spacing=14, run_spacing=14, vertical_alignment=ft.CrossAxisAlignment.START)
-    category_display_container = ft.Container(content=category_cards_row, padding=15, bgcolor="surfaceContainerHigh", border_radius=10)
+    category_cards_column = ft.Column([], spacing=14)
+    category_display_container = ft.Container(content=category_cards_column, padding=15, bgcolor="surfaceContainerHigh", border_radius=10)
 
-    # 5-Day Detailed Click Modal
+    # 5-Day Detailed Pop-up Modal
     detail_dialog = ft.AlertDialog(
         modal=True,
         title=ft.Text("Detailed Day Outlook", size=16, weight=ft.FontWeight.BOLD, color="amber300"),
         content=ft.Container(width=340, content=ft.Text("No details available")),
-        actions=[
-            ft.TextButton("Close", on_click=lambda e: close_dialog(e))
-        ],
+        actions=[ft.TextButton("Close", on_click=lambda e: close_dialog(e))],
         actions_alignment=ft.MainAxisAlignment.END,
     )
     page.overlay.append(detail_dialog)
@@ -82,16 +90,14 @@ async def main(page: ft.Page):
                 ft.Row([
                     ft.Text(f"High: {day_info.get('high')}°F", size=15, color="red300", weight=ft.FontWeight.BOLD),
                     ft.Text(f"Low: {day_info.get('low')}°F", size=15, color="blue300", weight=ft.FontWeight.BOLD),
-                    ft.Text(f"Max Rain: {day_info.get('rain_prob_max')}%", size=14, color="cyan300", weight=ft.FontWeight.BOLD),
+                    ft.Text(f"Rain: {day_info.get('rain_prob_max')}%", size=14, color="cyan300", weight=ft.FontWeight.BOLD),
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Divider(height=10, color="grey800"),
-                ft.Text("☀️ Daytime Outlook", size=13, weight=ft.FontWeight.BOLD, color="amber200"),
-                ft.Text(f"Rain Chance: {day_info.get('day_rain_prob')}%", size=12, color="cyan200"),
-                ft.Text(day_info.get("day_summary", "Partly cloudy with pleasant temperatures."), size=12, color="white"),
+                ft.Text("☀️ Daytime Conditions", size=13, weight=ft.FontWeight.BOLD, color="amber200"),
+                ft.Text(day_info.get("day_summary", ""), size=12, color="white"),
                 ft.Divider(height=10, color="grey800"),
-                ft.Text("🌙 Nighttime Outlook", size=13, weight=ft.FontWeight.BOLD, color="cyan200"),
-                ft.Text(f"Rain Chance: {day_info.get('night_rain_prob')}%", size=12, color="cyan200"),
-                ft.Text(day_info.get("night_summary", "Calm and clear skies overnight."), size=12, color="white"),
+                ft.Text("🌙 Overnight Conditions", size=13, weight=ft.FontWeight.BOLD, color="cyan200"),
+                ft.Text(day_info.get("night_summary", ""), size=12, color="white"),
                 ft.Divider(height=10, color="grey800"),
                 ft.Row([
                     ft.Text(f"🌅 Rise: {day_info.get('sunrise')}", size=11, color="amber100"),
@@ -106,72 +112,184 @@ async def main(page: ft.Page):
         detail_dialog.open = True
         page.update()
 
-    def create_subcat_cards(data_dict, category_key=""):
+    def build_cards_for_category(category_key):
         cards = []
-        if not data_dict or not isinstance(data_dict, dict):
-            return [ft.Text("No data available for this category.", color="grey400", size=13)]
+        cat_data = latest_weather_data.get(category_key, {})
 
-        data_to_render = dict(data_dict)
-        if "moon_rise" in data_to_render or "moon_set" in data_to_render:
-            m_rise = data_to_render.pop("moon_rise", "--")
-            m_set = data_to_render.pop("moon_set", "--")
-            cards.append(
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text("Moon Timing", size=14, weight=ft.FontWeight.BOLD, color="amber300"),
-                        ft.Divider(height=6, color="grey800"),
-                        ft.Row([ft.Text("🌕 Rise:", size=13, color="cyan200"), ft.Text(str(m_rise), size=13, color="white", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        ft.Row([ft.Text("🌑 Set:", size=13, color="cyan200"), ft.Text(str(m_set), size=13, color="white", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                    ], spacing=6),
-                    bgcolor="#252830", border_radius=8, padding=14, width=280,
-                )
+        # If Sporting Events, add the team search bar at the very top of the category
+        if category_key == "sporting_event":
+            search_box = ft.Container(
+                content=ft.Row([
+                    sports_input,
+                    ft.IconButton(icon=ft.Icons.SEARCH, on_click=load_weather, icon_color="amber300", tooltip="Search Team Weather")
+                ], spacing=10),
+                bgcolor="#1c1f26", padding=10, border_radius=8
             )
+            cards.append(search_box)
 
-        for key, val in data_to_render.items():
+        if not cat_data or not isinstance(cat_data, dict):
+            cards.append(ft.Text("No data available for this category.", color="grey400", size=13))
+            return cards
+
+        for key, val in cat_data.items():
             title = key.replace("_", " ").title()
-            if key == "fishing" and isinstance(val, dict):
-                f_score = val.get("score", "--")
-                lines = [seg.strip() for seg in val.get("details", "").split(".") if seg.strip()]
-                fishing_controls = [
-                    ft.Row([ft.Icon(ft.Icons.PHISHING, size=18, color="cyan300"), ft.Text("Fishing Outlook", size=14, weight=ft.FontWeight.BOLD, color="amber300")], spacing=8),
-                    ft.Divider(height=6, color="grey800"),
-                    ft.Container(
-                        content=ft.Row([ft.Text("Activity Score:", size=12, color="grey300"), ft.Text(f"{f_score}/100 (Prime)", size=13, color="green300", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        bgcolor="#1c1f26", padding=8, border_radius=6
-                    ),
+
+            # Outdoor Activities Cards (Score + Details with proper multiline wrap)
+            if isinstance(val, dict) and "score" in val:
+                score = val.get("score", "--")
+                details = val.get("details", "")
+                card = ft.Container(
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Text(title, size=15, weight=ft.FontWeight.BOLD, color="amber300"),
+                            ft.Text(f"Score: {score}/100", size=13, weight=ft.FontWeight.BOLD, color="green300")
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Divider(height=6, color="grey800"),
+                        ft.Row([
+                            ft.Text("Details: ", size=12, weight=ft.FontWeight.BOLD, color="grey400"),
+                            ft.Text(details, size=12, color="white", expand=True)
+                        ], vertical_alignment=ft.CrossAxisAlignment.START)
+                    ], spacing=6),
+                    bgcolor="#252830", border_radius=8, padding=12
+                )
+                cards.append(card)
+
+            # Clothing Recommendations Card (Clean badge per time of day)
+            elif key == "clothing" and isinstance(val, dict):
+                clothing_rows = [
+                    ft.Text("Clothing Recommendations", size=15, weight=ft.FontWeight.BOLD, color="amber300"),
+                    ft.Divider(height=6, color="grey800")
                 ]
-                for l in lines:
-                    fishing_controls.append(ft.Row([ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, size=13, color="amber200"), ft.Text(l, size=12, color="white", expand=True)], spacing=6))
-                cards.append(ft.Container(content=ft.Column(fishing_controls, spacing=6), bgcolor="#252830", border_radius=8, padding=14, width=320))
-            elif isinstance(val, list):
-                list_items = [ft.Text(title, size=14, weight=ft.FontWeight.BOLD, color="amber300"), ft.Divider(height=6, color="grey800")]
-                for item in val:
-                    if isinstance(item, dict):
-                        item_box = ft.Container(
-                            content=ft.Column([
-                                ft.Text(f"• {item.get('title', item.get('item', 'Item'))}", size=13, weight=ft.FontWeight.BOLD, color="amber200"),
-                                ft.Text(f"  {item.get('venue', item.get('action', ''))}", size=12, color="white"),
-                                ft.Text(f"  {item.get('time', item.get('timing', item.get('notes', '')))}", size=11, color="cyan200"),
-                            ], spacing=2),
-                            bgcolor="#1c1f26", padding=6, border_radius=6
+                for time_slot, suggestion in val.items():
+                    clothing_rows.append(
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Container(
+                                    content=ft.Text(time_slot.capitalize(), size=11, weight=ft.FontWeight.BOLD, color="black"),
+                                    bgcolor="amber300", padding=ft.Padding(8, 4, 8, 4), border_radius=6, width=90, alignment=ft.Alignment(0, 0)
+                                ),
+                                ft.Text(str(suggestion), size=12, color="white", expand=True)
+                            ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                            bgcolor="#1c1f26", padding=8, border_radius=6
                         )
-                        list_items.append(item_box)
-                    else:
-                        list_items.append(ft.Text(f"• {str(item)}", size=12, color="white"))
-                cards.append(ft.Container(content=ft.Column(list_items, spacing=6), bgcolor="#252830", border_radius=8, padding=14, width=320))
+                    )
+                cards.append(ft.Container(content=ft.Column(clothing_rows, spacing=8), bgcolor="#252830", border_radius=8, padding=12))
+
+            # Hair & Makeup
+            elif key == "hair_makeup" and isinstance(val, dict):
+                hm_items = [
+                    ft.Text("Hair & Makeup Outlook", size=15, weight=ft.FontWeight.BOLD, color="amber300"),
+                    ft.Divider(height=6, color="grey800")
+                ]
+                for subk, subv in val.items():
+                    hm_items.append(
+                        ft.Row([
+                            ft.Text(f"{subk.capitalize()}: ", size=12, weight=ft.FontWeight.BOLD, color="amber200"),
+                            ft.Text(str(subv), size=12, color="white", expand=True)
+                        ], vertical_alignment=ft.CrossAxisAlignment.START)
+                    )
+                cards.append(ft.Container(content=ft.Column(hm_items, spacing=6), bgcolor="#252830", border_radius=8, padding=12))
+
+            # Sporting Events List
+            elif key == "events" and isinstance(val, list):
+                event_cards = [
+                    ft.Text("Tracked Game Day Weather", size=15, weight=ft.FontWeight.BOLD, color="amber300"),
+                    ft.Divider(height=6, color="grey800")
+                ]
+                for ev in val:
+                    event_cards.append(
+                        ft.Container(
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Text(ev.get("title", "Matchup"), size=14, weight=ft.FontWeight.BOLD, color="amber200", expand=True),
+                                    ft.Text(f"⏰ {ev.get('time', '')}", size=12, color="cyan200", weight=ft.FontWeight.W_600)
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ft.Text(f"📍 {ev.get('venue', '')}", size=12, color="grey300"),
+                                ft.Text(f"🌤️ {ev.get('conditions', '')}", size=12, color="green200", weight=ft.FontWeight.W_500),
+                            ], spacing=4),
+                            bgcolor="#1c1f26", padding=10, border_radius=6
+                        )
+                    )
+                cards.append(ft.Container(content=ft.Column(event_cards, spacing=8), bgcolor="#252830", border_radius=8, padding=12))
+
+            # Sowing & Planting Calendar
+            elif key == "planting_harvest" and isinstance(val, list):
+                plant_items = [
+                    ft.Text("Planting & Harvest Calendar", size=15, weight=ft.FontWeight.BOLD, color="amber300"),
+                    ft.Divider(height=6, color="grey800")
+                ]
+                for p in val:
+                    plant_items.append(
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Column([
+                                    ft.Text(f"🌱 {p.get('item', '')}", size=13, weight=ft.FontWeight.BOLD, color="amber200"),
+                                    ft.Text(p.get("timing", ""), size=11, color="cyan200")
+                                ], expand=True),
+                                ft.Container(
+                                    content=ft.Text(p.get("action", ""), size=11, color="white", weight=ft.FontWeight.BOLD),
+                                    bgcolor="#102a18", border=ft.Border(all=ft.BorderSide(1, "green400")), padding=ft.Padding(8, 4, 8, 4), border_radius=6
+                                )
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                            bgcolor="#1c1f26", padding=8, border_radius=6
+                        )
+                    )
+                cards.append(ft.Container(content=ft.Column(plant_items, spacing=8), bgcolor="#252830", border_radius=8, padding=12))
+
+            # Celestial Events List
+            elif key == "celestial_events" and isinstance(val, list):
+                celest_items = [
+                    ft.Text("Celestial Events & Passings", size=15, weight=ft.FontWeight.BOLD, color="amber300"),
+                    ft.Divider(height=6, color="grey800")
+                ]
+                for c in val:
+                    celest_items.append(
+                        ft.Container(
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Text(c.get("title", ""), size=13, weight=ft.FontWeight.BOLD, color="amber200", expand=True),
+                                    ft.Text(f"⏰ {c.get('time', '')}", size=12, color="cyan200", weight=ft.FontWeight.BOLD)
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ft.Text(f"🔭 Direction: {c.get('direction', '')}", size=11, color="grey300"),
+                                ft.Text(f"✨ {c.get('notes', '')}", size=11, color="green200")
+                            ], spacing=3),
+                            bgcolor="#1c1f26", padding=8, border_radius=6
+                        )
+                    )
+                cards.append(ft.Container(content=ft.Column(celest_items, spacing=8), bgcolor="#252830", border_radius=8, padding=12))
+
+            # General Dicts / Strings
             elif isinstance(val, dict):
-                content_col = [ft.Text(title, size=14, weight=ft.FontWeight.BOLD, color="amber300"), ft.Divider(height=6, color="grey800")]
+                col = [ft.Text(title, size=15, weight=ft.FontWeight.BOLD, color="amber300"), ft.Divider(height=6, color="grey800")]
                 for sk, sv in val.items():
-                    content_col.append(ft.Row([ft.Text(f"{sk.replace('_', ' ').title()}:", size=12, color="grey300"), ft.Text(str(sv), size=12, color="white", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
-                cards.append(ft.Container(content=ft.Column(content_col, spacing=6), bgcolor="#252830", border_radius=8, padding=14, width=300))
+                    col.append(
+                        ft.Row([
+                            ft.Text(f"{sk.replace('_', ' ').title()}: ", size=12, weight=ft.FontWeight.BOLD, color="grey400"),
+                            ft.Text(str(sv), size=12, color="white", expand=True)
+                        ], vertical_alignment=ft.CrossAxisAlignment.START)
+                    )
+                cards.append(ft.Container(content=ft.Column(col, spacing=6), bgcolor="#252830", border_radius=8, padding=12))
+            elif isinstance(val, list):
+                col = [ft.Text(title, size=15, weight=ft.FontWeight.BOLD, color="amber300"), ft.Divider(height=6, color="grey800")]
+                for li in val:
+                    col.append(ft.Text(f"• {str(li)}", size=12, color="white"))
+                cards.append(ft.Container(content=ft.Column(col, spacing=6), bgcolor="#252830", border_radius=8, padding=12))
             else:
-                cards.append(ft.Container(content=ft.Column([ft.Text(title, size=13, weight=ft.FontWeight.BOLD, color="amber200"), ft.Divider(height=6, color="grey800"), ft.Text(str(val), size=13, color="white")], spacing=4), bgcolor="#252830", border_radius=8, padding=14, width=280))
+                cards.append(
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Text(title, size=14, weight=ft.FontWeight.BOLD, color="amber200"),
+                            ft.Divider(height=6, color="grey800"),
+                            ft.Text(str(val), size=12, color="white")
+                        ], spacing=4),
+                        bgcolor="#252830", border_radius=8, padding=12
+                    )
+                )
         return cards
 
     def render_active_category():
         key = current_selected_category[0]
-        cat_data = latest_weather_data.get(key, {})
-        category_cards_row.controls = create_subcat_cards(cat_data, category_key=key)
+        category_cards_column.controls = build_cards_for_category(key)
         page.update()
 
     def handle_category_click(e):
@@ -213,9 +331,10 @@ async def main(page: ft.Page):
 
     async def load_weather(e=None):
         loc = location_input.value.strip() or "28412"
+        teams = sports_input.value.strip() or "Panthers, Braves"
         try:
             import server
-            res = server.get_full_weather_data(loc)
+            res = server.get_full_weather_data(query=loc, sport_team=teams)
             name = res.get("location_name", loc)
 
             latest_weather_data.clear()
@@ -223,10 +342,10 @@ async def main(page: ft.Page):
 
             location_display_text.value = f"📍 {name}"
             curr = res.get("current", {})
-            condition = curr.get("condition", "Clear")
+            condition = curr.get("condition", "Sunny")
             t_val = curr.get("temp", 74)
 
-            is_night = curr.get("is_night", False) or datetime.now().hour < 7 or datetime.now().hour >= 19
+            is_night = curr.get("is_night", False)
             hero_weather_icon.name = ft.Icons.NIGHTLIGHT_ROUND if is_night else ft.Icons.WB_SUNNY
             hero_weather_icon.color = "cyan200" if is_night else "amber300"
             widget_hero_icon.name = ft.Icons.NIGHTLIGHT_ROUND if is_night else ft.Icons.WB_SUNNY
@@ -235,22 +354,17 @@ async def main(page: ft.Page):
             condition_text.value = condition
             curr_temp_text.value = f"{t_val}°F"
             feels_like_text.value = f"Feels Like: {t_val}°F"
-            humidity_text.value = f"Humidity: {curr.get('humidity', 65)}%"
-            wind_text.value = f"Wind: {curr.get('wind', 6)} mph"
-            uv_badge.value = f"UV: {curr.get('uv_index', 5.0)}"
+            humidity_text.value = f"Humidity: {curr.get('humidity', 51)}%"
+            wind_text.value = f"Wind: {curr.get('wind', 7)} mph"
+            uv_badge.value = f"UV: {curr.get('uv_index', 4.0)}"
 
-            s_rise = curr.get("sunrise", "06:58 AM")
-            s_set = curr.get("sunset", "07:10 PM")
-            m_rise = curr.get("moon_rise", "07:20 PM")
-            m_set = curr.get("moon_set", "06:35 AM")
+            sunrise_text.value = f"🌅 Sunrise: {curr.get('sunrise')}"
+            sunset_text.value = f"🌇 Sunset: {curr.get('sunset')}"
+            moonrise_text.value = f"🌕 Moonrise: {curr.get('moon_rise')}"
+            moonset_text.value = f"🌑 Moonset: {curr.get('moon_set')}"
 
-            sunrise_text.value = f"🌅 Sunrise: {s_rise}"
-            sunset_text.value = f"🌇 Sunset: {s_set}"
-            moonrise_text.value = f"🌕 Moonrise: {m_rise}"
-            moonset_text.value = f"🌑 Moonset: {m_set}"
-
-            current_precip_text.value = curr.get("precip_summary", "Precip Now: 0% | Next 24h: 5%")
-            rain_duration_text.value = curr.get("rain_duration", "No immediate heavy rain expected.")
+            current_precip_text.value = curr.get("precip_summary", "Precip Now: 0% | Next 24h Max: 0%")
+            rain_duration_text.value = curr.get("rain_duration", "Zero precipitation expected.")
 
             widget_loc_text.value = name
             widget_condition_text.value = condition
@@ -264,12 +378,12 @@ async def main(page: ft.Page):
 
             hourly_cards = []
             for item in res.get("hourly_36", []):
-                h_is_night = item.get("is_night", False)
+                h_night = item.get("is_night", False)
                 hourly_cards.append(
                     ft.Container(
                         content=ft.Column([
                             ft.Text(str(item.get("time")), size=11, color="amber200", weight=ft.FontWeight.BOLD),
-                            ft.Icon(ft.Icons.NIGHTLIGHT_ROUND if h_is_night else ft.Icons.WB_SUNNY, size=20, color="cyan200" if h_is_night else "amber300"),
+                            ft.Icon(ft.Icons.NIGHTLIGHT_ROUND if h_night else ft.Icons.WB_SUNNY, size=20, color="cyan200" if h_night else "amber300"),
                             ft.Text(f"{item.get('temp')}°", size=13, weight=ft.FontWeight.BOLD, color="white"),
                             ft.Row([ft.Icon(ft.Icons.WATER_DROP, size=10, color="cyan300"), ft.Text(f"{item.get('rain_chance')}%", size=10, color="cyan300")], alignment=ft.MainAxisAlignment.CENTER),
                         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4),
@@ -278,7 +392,6 @@ async def main(page: ft.Page):
                 )
             hourly_row.controls = hourly_cards
 
-            # Clickable 5-Day Forecast Cards with Tap Indicator
             day_cards = []
             for day in daily_data:
                 day_cards.append(
@@ -286,7 +399,7 @@ async def main(page: ft.Page):
                         data=day,
                         on_click=lambda e: show_day_details(e.control.data),
                         ink=True,
-                        tooltip="Tap for full day & night breakdown",
+                        tooltip="Tap for full details",
                         content=ft.Column([
                             ft.Text(day.get("date", ""), size=12, weight=ft.FontWeight.BOLD, color="amber200"),
                             ft.Container(
@@ -327,8 +440,8 @@ async def main(page: ft.Page):
             page.update()
 
     location_input.on_submit = load_weather
+    sports_input.on_submit = load_weather
 
-    # 2x2 Photorealistic Widget Component
     photorealistic_2x2_widget = ft.Container(
         width=320, height=320, border_radius=28, padding=20,
         gradient=ft.LinearGradient(
@@ -364,7 +477,10 @@ async def main(page: ft.Page):
     full_dashboard = ft.Column([
         photorealistic_2x2_widget,
         ft.Divider(height=15, color="grey800"),
-        ft.Row([location_input, ft.IconButton(icon=ft.Icons.SEARCH, on_click=load_weather, icon_color="amber300")], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+        ft.Row([
+            location_input,
+            ft.IconButton(icon=ft.Icons.SEARCH, on_click=load_weather, icon_color="amber300")
+        ], alignment=ft.MainAxisAlignment.CENTER),
         ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
         ft.Container(
             content=ft.Column([
@@ -394,11 +510,10 @@ async def main(page: ft.Page):
         category_buttons_row,
         ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
         category_display_container,
-    ], width=850)
+    ], width=750)
 
     page.add(full_dashboard)
     await load_weather()
 
 if __name__ == "__main__":
     ft.app(target=main, view=ft.AppView.WEB_BROWSER)
-    

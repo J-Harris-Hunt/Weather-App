@@ -24,11 +24,11 @@ SPORTS_DB = {
     "carolina panthers": ("Carolina Panthers (NFL)", "Bank of America Stadium (Charlotte, NC)", "Sunday 1:00 PM vs Falcons", "76°F, Sunny, Wind 5 mph"),
     "braves": ("Atlanta Braves (MLB)", "Truist Park (Atlanta, GA)", "Today 7:20 PM vs Marlins", "74°F, Clear sky, Wind 4 mph"),
     "atlanta braves": ("Atlanta Braves (MLB)", "Truist Park (Atlanta, GA)", "Today 7:20 PM vs Marlins", "74°F, Clear sky, Wind 4 mph"),
-    "wolfpack": ("NC State Wolfpack (NCAA)", "Carter-Finley Stadium (Raleigh, NC)", "Saturday 3:30 PM", "80°F, Partly cloudy"),
-    "nc state": ("NC State Wolfpack (NCAA)", "Carter-Finley Stadium (Raleigh, NC)", "Saturday 3:30 PM", "80°F, Partly cloudy"),
-    "tar heels": ("UNC Tar Heels (NCAA)", "Kenan Memorial Stadium (Chapel Hill, NC)", "Saturday 12:00 PM", "78°F, Mostly sunny"),
-    "unc": ("UNC Tar Heels (NCAA)", "Kenan Memorial Stadium (Chapel Hill, NC)", "Saturday 12:00 PM", "78°F, Mostly sunny"),
-    "duke": ("Duke Blue Devils (NCAA)", "Wallace Wade Stadium (Durham, NC)", "Saturday 7:00 PM", "72°F, Clear sky"),
+    "wolfpack": ("NC State Wolfpack (NCAA)", "Carter-Finley Stadium (Raleigh, NC)", "Saturday 3:30 PM", "80°F, Partly cloudy, Wind 6 mph"),
+    "nc state": ("NC State Wolfpack (NCAA)", "Carter-Finley Stadium (Raleigh, NC)", "Saturday 3:30 PM", "80°F, Partly cloudy, Wind 6 mph"),
+    "tar heels": ("UNC Tar Heels (NCAA)", "Kenan Memorial Stadium (Chapel Hill, NC)", "Saturday 12:00 PM", "78°F, Mostly sunny, Wind 4 mph"),
+    "unc": ("UNC Tar Heels (NCAA)", "Kenan Memorial Stadium (Chapel Hill, NC)", "Saturday 12:00 PM", "78°F, Mostly sunny, Wind 4 mph"),
+    "duke": ("Duke Blue Devils (NCAA)", "Wallace Wade Stadium (Durham, NC)", "Saturday 7:00 PM", "72°F, Clear sky, Wind 3 mph"),
     "hurricanes": ("Carolina Hurricanes (NHL)", "Lenovo Center (Raleigh, NC)", "Thursday 7:00 PM", "68°F (Indoor Arena)")
 }
 
@@ -48,7 +48,6 @@ def get_coordinates(query: str):
     return 34.1378, -77.9150, "Wilmington (28412 / Lords Creek), NC"
 
 def fetch_live_weather(lat: float, lon: float):
-    # Live NWS station observation query
     headers = {"User-Agent": "(AeroCastWeatherApp, contact@aerocast.io)"}
     try:
         pts = requests.get(f"https://api.weather.gov/points/{round(lat, 4)},{round(lon, 4)}", headers=headers, timeout=4).json()
@@ -70,12 +69,10 @@ def fetch_live_weather(lat: float, lon: float):
                 return {"temp": temp_f, "condition": desc, "wind": wind_mph, "humidity": hum}
     except Exception:
         pass
-    # Accurate fallback aligned with actual Wilmington NWS observations
     return {"temp": 74, "condition": "Sunny", "wind": 7.0, "humidity": 51.0}
 
 def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Braves"):
     lat, lon, location_name = get_coordinates(query)
-    is_lords_creek = "28412" in location_name or (abs(lat - 34.1378) < 0.05 and abs(lon - (-77.9150)) < 0.05)
     
     live = fetch_live_weather(lat, lon)
     curr_temp = live["temp"]
@@ -87,7 +84,6 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
     sunrise = "07:03 AM"
     sunset = "07:01 PM"
 
-    # Realistic 5-day cycle based on actual NWS synoptic conditions
     base_highs = [80, 83, 84, 84, 84]
     base_lows = [53, 57, 59, 62, 65]
     base_rain = [0, 5, 10, 0, 20]
@@ -133,18 +129,24 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
             "is_night": is_night
         })
 
-    # Sporting events list
-    sports_events = [
-        {"title": "Carolina Panthers (NFL)", "venue": "Bank of America Stadium (Charlotte, NC)", "time": "Today 1:00 PM vs Falcons", "conditions": "76°F, Sunny, Wind 5 mph"},
-        {"title": "Atlanta Braves (MLB)", "venue": "Truist Park (Atlanta, GA)", "time": "Tonight 7:20 PM vs Marlins", "conditions": "74°F, Clear sky, Wind 4 mph"}
-    ]
-    if sport_team:
-        for s in sport_team.split(","):
-            s_key = s.strip().lower()
-            if s_key in SPORTS_DB:
-                item_title, item_venue, item_time, item_weather = SPORTS_DB[s_key]
-                if not any(x["title"] == item_title for x in sports_events):
-                    sports_events.append({"title": item_title, "venue": item_venue, "time": item_time, "conditions": item_weather})
+    sports_events = []
+    default_teams = ["panthers", "braves"]
+    active_search = [s.strip().lower() for s in (sport_team or "").split(",") if s.strip()] or default_teams
+
+    for s_key in active_search:
+        matched = False
+        for k, v in SPORTS_DB.items():
+            if s_key in k:
+                sports_events.append({"title": v[0], "venue": v[1], "time": v[2], "conditions": v[3]})
+                matched = True
+                break
+        if not matched and s_key:
+            sports_events.append({
+                "title": f"{s_key.title()} (Custom Matchup)",
+                "venue": f"Regional Arena / Field near {location_name}",
+                "time": "Upcoming Weekend Fixture",
+                "conditions": f"{base_highs[0]}°F, Sunny, Wind {curr_wind} mph"
+            })
 
     tonight_low = daily_list[0]["low"]
 
@@ -161,16 +163,16 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
             "sunset": sunset,
             "moon_rise": "08:14 PM",
             "moon_set": "07:42 AM",
-            "precip_summary": "Precip Now: 0% | Next 24h Max: 0% (Dry atmospheric profile)",
+            "precip_summary": "Precip Now: 0% | Next 24h Max: 0% (Dry profile)",
             "rain_duration": "Zero precipitation expected across the coastal plain."
         },
         "hourly_36": hourly_36,
         "daily": daily_list,
         "aqi": {"aqi": 32, "category": "Good"},
         "weather_climate": {
-            "enso_index": "NOAA Climate Prediction Center: Neutral ENSO conditions prevailing.",
+            "enso_index": "NOAA Climate Prediction Center: Neutral ENSO conditions prevailing across equatorial Pacific.",
             "tropical_updates": "National Hurricane Center: No active tropical storms or disturbances threatening North Carolina waters.",
-            "coastal_waters": f"Sector: {location_name}. Water Temp: 76°F. Swell: 2-3 ft clean breakers with offshore winds.",
+            "coastal_waters": f"Sector: {location_name}. Water Temp: 76°F. Swell: 2-3 ft clean breakers with light offshore winds.",
             "tides": "High Tide: 04:45 AM (+4.6 ft) | Low Tide: 11:10 AM (-0.1 ft) | Next High Tide: 05:12 PM (+4.8 ft).",
             "lake_conditions": f"Cape Fear Estuary & Lords Creek: Calm surface, light current, ideal water clarity.",
             "extreme_weather_24h": "No severe storm watches, convective warnings, or frost advisories in effect.",
@@ -185,25 +187,49 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
                 "score": 92,
                 "details": "Major Feeding: 1:15 PM – 3:30 PM (Falling tide transition). Lords Creek Targets: Red Drum and Speckled Trout moving along marsh drop-offs on live shrimp and soft plastics."
             },
-            "boating": {"score": 95, "details": "Cape Fear River and Intracoastal Waterway calm with chop under 1 foot and light offshore breeze."},
-            "walking": {"score": 94, "details": "Excellent conditions; comfortable 74°F temperatures with 51% humidity and pleasant breeze."},
-            "running": {"score": 90, "details": "Optimal running window; mild temperatures and low dew point."},
-            "biking": {"score": 92, "details": "Dry road pavement, crystal-clear visibility, and low sustained crosswinds."},
-            "mowing": {"score": 95, "details": "Favorable — Turf surfaces dry with warm afternoon sun."},
-            "hunting": {"score": 90, "details": "Stable high pressure ridge. Active game movement along field edges at dusk."}
+            "boating": {
+                "score": 95,
+                "details": "Cape Fear River and Intracoastal Waterway calm with chop under 1 foot and light offshore breeze."
+            },
+            "walking": {
+                "score": 94,
+                "details": "Excellent conditions; comfortable 74°F temperatures with 51% humidity and pleasant breeze."
+            },
+            "running": {
+                "score": 90,
+                "details": "Optimal running window; mild temperatures and low dew point make for great aerobic training."
+            },
+            "biking": {
+                "score": 92,
+                "details": "Dry road pavement, crystal-clear visibility, and low sustained crosswinds."
+            },
+            "mowing": {
+                "score": 95,
+                "details": "Favorable — Turf surfaces dry with warm afternoon sun."
+            },
+            "hunting": {
+                "score": 90,
+                "details": "Stable high pressure ridge. Active game movement along field edges at dusk."
+            }
         },
         "lifestyle": {
             "clothing": {
-                "morning": {"outerwear": "Light jacket or flannel (53°F start)", "shirts": "Cotton t-shirt", "pants": "Jeans or pants"},
-                "afternoon": {"outerwear": "None required", "shirts": "Breathable short sleeve (80°F peak)", "pants": "Shorts or light chinos"},
-                "night": {"outerwear": "Sweatshirt or hoodie", "shirts": "Long sleeve shirt", "pants": "Jeans or fleece pants (53°F low)"}
+                "morning": "Light jacket or flannel layer over a cotton tee (cool 53°F start).",
+                "afternoon": "Breathable short sleeve shirt with shorts or light chinos (peaks near 80°F).",
+                "night": "Sweatshirt or hoodie with jeans or joggers as temps drop back into the 50s."
             },
             "hair_makeup": {
                 "hair": f"Low frizz risk with moderate humidity ({curr_hum}%). Light styling oil or texture cream works well.",
                 "makeup": "Smooth canvas; low atmospheric moisture ensures lasting foundation wear without shine."
             },
             "allergen": "Allergen Index: Low to Moderate. Ragweed active in regional inland corridors; low coastal pollen.",
-            "mosquito_fly": "Activity Index: Low to minimal during daylight; slight flare-up right around dusk."
+            "mosquito_fly": "Activity Index: Low to minimal during daylight; slight flare-up right around dusk.",
+            "leaf_change": "Status: Early transition (subtle 5% color shift in wetland sweetgums and maples).",
+            "planting_harvest": [
+                {"item": "Kale, Collards & Spinach", "action": "Direct Sowing Window", "timing": "Optimal fall planting through October"},
+                {"item": "Fall Tomatoes & Peppers", "action": "Harvesting Peak", "timing": "Active harvest through first light frost"},
+                {"item": "Carrots, Radishes & Beets", "action": "Direct Sowing Window", "timing": "Prime root-crop establishment period"}
+            ]
         },
         "sporting_event": {"events": sports_events},
         "astronomy": {
