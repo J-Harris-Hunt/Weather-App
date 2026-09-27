@@ -268,7 +268,7 @@ def api_weather(query: str = "28412", sport_team: str = "Panthers, Braves"):
         raise HTTPException(status_code=500, detail=str(e))
 
 from main import main as flet_ui_main
-app.mount("/", flet_fastapi.app(flet_ui_main))
+app.mount("/", flet_fastapi.app(flet_ui_main, assets_dir="assets"))
 
 if __name__ == "__main__":
     import uvicorn

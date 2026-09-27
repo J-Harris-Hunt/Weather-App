@@ -2,7 +2,7 @@ import flet as ft
 from datetime import datetime
 
 async def main(page: ft.Page):
-    page.title = "AeroCast Weather & Climate"
+    page.title = "Thick Moose Weather"
     page.vertical_alignment = ft.MainAxisAlignment.START
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.scroll = ft.ScrollMode.ADAPTIVE
