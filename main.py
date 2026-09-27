@@ -82,11 +82,21 @@ async def main(page: ft.Page):
     rain_duration_text = ft.Text("Zero precipitation expected.", size=13, color="amber100", text_align=ft.TextAlign.CENTER)
 
     # Interactive Live Doppler Radar Section
-    radar_map_btn = ft.ElevatedButton(
-        text="Open Full Interactive Radar",
-        icon=ft.Icons.RADAR,
-        style=ft.ButtonStyle(bgcolor="amber400", color="black"),
-        url="https://www.rainviewer.com/map.html?loc=34.1378,-77.9150,8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=1&layer=radar&sm=1&sn=1"
+    current_radar_url = ["https://www.rainviewer.com/map.html?loc=34.1378,-77.9150,8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=1&layer=radar&sm=1&sn=1"]
+
+    async def open_live_radar(e):
+        await page.launch_url(current_radar_url[0])
+
+    radar_button_widget = ft.Container(
+        content=ft.Row([
+            ft.Icon(ft.Icons.RADAR, color="black", size=18),
+            ft.Text("Open Full Interactive Radar", color="black", weight=ft.FontWeight.BOLD, size=13),
+        ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
+        bgcolor="amber400",
+        border_radius=10,
+        padding=ft.Padding(16, 10, 16, 10),
+        ink=True,
+        on_click=open_live_radar,
     )
 
     radar_container = ft.Container(
@@ -97,7 +107,7 @@ async def main(page: ft.Page):
             ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
             ft.Text("Real-time cloud, rain & convective storm tracking", size=11, color="grey400", text_align=ft.TextAlign.CENTER),
             ft.Container(height=6),
-            radar_map_btn,
+            radar_button_widget,
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4),
         bgcolor="#18202c",
         border=ft.Border.all(1, "cyan800"),
@@ -387,7 +397,8 @@ async def main(page: ft.Page):
             t_val = curr.get("temp", 74)
 
             # Update radar link to new coordinates
-            radar_map_btn.url = res.get("radar_url", radar_map_btn.url)
+            if "radar_url" in res:
+                current_radar_url[0] = res["radar_url"]
 
             is_night = curr.get("is_night", False)
             hero_weather_icon.name = ft.Icons.NIGHTLIGHT_ROUND if is_night else ft.Icons.WB_SUNNY
