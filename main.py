@@ -20,7 +20,7 @@ async def main(page: ft.Page):
                     src="/icons/Icon-192.png",
                     width=48,
                     height=48,
-                    fit=ft.ImageFit.COVER,
+                    fit="cover",
                     border_radius=24,
                 ),
                 border=ft.Border.all(2, "amber300"),
