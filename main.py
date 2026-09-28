@@ -92,7 +92,6 @@ async def main(page: ft.Page):
         padding=ft.Padding(16, 10, 16, 10),
         ink=True,
         url="https://www.rainviewer.com/map.html?loc=34.1378,-77.9150,8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=1&layer=radar&sm=1&sn=1",
-        url_target=ft.UrlTarget.BLANK,
     )
 
     radar_container = ft.Container(
