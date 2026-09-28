@@ -82,11 +82,6 @@ async def main(page: ft.Page):
     rain_duration_text = ft.Text("Zero precipitation expected.", size=13, color="amber100", text_align=ft.TextAlign.CENTER)
 
     # Interactive Live Doppler Radar Section
-    current_radar_url = ["https://www.rainviewer.com/map.html?loc=34.1378,-77.9150,8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=1&layer=radar&sm=1&sn=1"]
-
-    async def open_live_radar(e):
-        await page.launch_url(current_radar_url[0])
-
     radar_button_widget = ft.Container(
         content=ft.Row([
             ft.Icon(ft.Icons.RADAR, color="black", size=18),
@@ -96,7 +91,8 @@ async def main(page: ft.Page):
         border_radius=10,
         padding=ft.Padding(16, 10, 16, 10),
         ink=True,
-        on_click=open_live_radar,
+        url="https://www.rainviewer.com/map.html?loc=34.1378,-77.9150,8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=1&layer=radar&sm=1&sn=1",
+        url_target=ft.UrlTarget.BLANK,
     )
 
     radar_container = ft.Container(
@@ -398,7 +394,7 @@ async def main(page: ft.Page):
 
             # Update radar link to new coordinates
             if "radar_url" in res:
-                current_radar_url[0] = res["radar_url"]
+                radar_button_widget.url = res["radar_url"]
 
             is_night = curr.get("is_night", False)
             hero_weather_icon.name = ft.Icons.NIGHTLIGHT_ROUND if is_night else ft.Icons.WB_SUNNY
@@ -535,14 +531,9 @@ async def main(page: ft.Page):
     praise_mailto = "mailto:thickmooseweather@gmail.com?subject=Thick%20Moose%20Weather%20-%20Suggestions%20%26%20Praise"
     complaints_mailto = "mailto:thickmooseweather@gmail.com?subject=Thick%20Moose%20Weather%20-%20Problems%20%26%20Complaints"
 
-    async def open_praise(e):
-        await page.launch_url(praise_mailto)
-
-    async def open_complaints(e):
-        await page.launch_url(complaints_mailto)
-
     feedback_section = ft.Container(
         content=ft.Row([
+            # Suggestions and Praise Button
             ft.Container(
                 content=ft.Column([
                     ft.Text("📬 ✨", size=32, text_align=ft.TextAlign.CENTER),
@@ -556,8 +547,9 @@ async def main(page: ft.Page):
                 width=175,
                 ink=True,
                 tooltip="Send suggestions or praise",
-                on_click=open_praise,
+                url=praise_mailto,
             ),
+            # Problems and Complaints (Perched on a Bear Trap)
             ft.Container(
                 content=ft.Column([
                     ft.Row([
@@ -575,7 +567,7 @@ async def main(page: ft.Page):
                 width=175,
                 ink=True,
                 tooltip="Complain if you dare!",
-                on_click=open_complaints,
+                url=complaints_mailto,
             ),
         ], alignment=ft.MainAxisAlignment.CENTER, spacing=16),
         padding=ft.Padding(0, 16, 0, 30),
