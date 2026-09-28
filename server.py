@@ -2,6 +2,7 @@ import os
 import requests
 import math
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -105,15 +106,26 @@ def get_coordinates(query: str):
 
     return 34.1378, -77.9150, 15, "Wilmington (28412 / Lords Creek), NC"
 
+def get_timezone_for_coordinates(lon: float) -> ZoneInfo:
+    """Approximate US continental timezone based on longitude"""
+    try:
+        if lon > -85.0:
+            return ZoneInfo("America/New_York")    # Eastern Time
+        elif lon > -100.0:
+            return ZoneInfo("America/Chicago")     # Central Time
+        elif lon > -115.0:
+            return ZoneInfo("America/Denver")      # Mountain Time
+        else:
+            return ZoneInfo("America/Los_Angeles") # Pacific Time
+    except Exception:
+        return ZoneInfo("America/New_York")
+
 def is_coastal_region(lat: float, lon: float) -> bool:
-    """Rough check whether coordinates are in an Atlantic, Gulf, or Pacific coastal corridor"""
-    # Atlantic Coast
+    """Check whether coordinates are in an Atlantic, Gulf, or Pacific coastal corridor"""
     if lon > -81.5 and lat > 25.0 and (lon > -78.5 or (lat > 37.0 and lon > -76.0)):
         return True
-    # Gulf Coast
     if lat < 30.5 and -98.0 < lon < -82.0:
         return True
-    # Pacific Coast
     if lon < -117.0 and lat > 32.0:
         return True
     return False
@@ -157,7 +169,7 @@ def generate_microclimate_profile(lat: float, lon: float, elev_ft: int, location
             {"item": "Carrots, Radishes & Beets", "action": "Direct Sowing Window", "timing": "Prime root-crop establishment period"}
         ]
 
-    # 4. Interior Lowlands & River Plains (< 1,000 ft inland)
+    # 4. Continental Interior Lowlands & River Plains (< 1,000 ft inland)
     else:
         micro_memo = f"Continental Interior Lowland (Elev. {elev_ft} ft): Calm nocturnal surface winds with strong morning temperature inversions along valley basins."
         water_label = f"River Basins & Inland Reservoirs ({location_name})"
@@ -194,7 +206,6 @@ def fetch_live_weather(lat: float, lon: float):
     except Exception:
         pass
 
-    # Open-Meteo fallback if outside US NWS boundaries
     try:
         om = requests.get(
             f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph",
@@ -222,7 +233,10 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
         lat, lon, elev_ft, location_name, curr_temp, curr_wind, curr_hum
     )
 
-    now = datetime.now()
+    # Localized coordinate timezone handling
+    local_tz = get_timezone_for_coordinates(lon)
+    now = datetime.now(local_tz)
+    
     sunrise = "07:03 AM"
     sunset = "07:01 PM"
 
@@ -255,8 +269,10 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
         })
 
     hourly_36 = []
+    # Start at the next upcoming top of the hour locally
+    start_hour_dt = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
     for h in range(36):
-        f_dt = now + timedelta(hours=h)
+        f_dt = start_hour_dt + timedelta(hours=h)
         h_hour = f_dt.hour
         h_display = f_dt.strftime("%I %p").lstrip("0")
         is_night = (h_hour < 7 or h_hour >= 19)
