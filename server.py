@@ -36,7 +36,7 @@ SPORTS_DB = {
     "broncos": ("Denver Broncos (NFL)", "Empower Field at Mile High (Denver, CO)", "Sunday 4:25 PM", "62°F, High plains breeze, Wind 8 mph"),
     "cowboys": ("Dallas Cowboys (NFL)", "AT&T Stadium (Arlington, TX)", "Sunday 1:00 PM", "72°F (Climate-controlled)"),
     "eagles": ("Philadelphia Eagles (NFL)", "Lincoln Financial Field (Philadelphia, PA)", "Sunday 1:00 PM", "65°F, Crisp autumn air, Wind 7 mph"),
-    "chiefs": ("Kansas City Chiefs (NFL)", "Arrowhead Stadium (Kansas City, MO)", "Sunday 4:25 PM", "68°F, Clear sky, Wind 9 mph"),
+    "chiefs": ("Kansas Chiefs (NFL)", "Arrowhead Stadium (Kansas City, MO)", "Sunday 4:25 PM", "68°F, Clear sky, Wind 9 mph"),
 }
 
 def auto_detect_location():
@@ -66,7 +66,7 @@ def get_coordinates(query: str):
             try:
                 rev = requests.get(
                     f"https://nominatim.openstreetmap.org/reverse?lat={lat_f}&lon={lon_f}&format=json",
-                    headers={"User-Agent": "ThickMooseWeatherApp/1.0"},
+                    headers={"User-Agent": "ThickMooseWeatherApp/2.0"},
                     timeout=3
                 ).json()
                 addr = rev.get("address", {})
@@ -89,7 +89,7 @@ def get_coordinates(query: str):
         lat, lon, elev, name = LOCAL_MICROCLIMATES[clean_q]
         return lat, lon, elev, name
 
-    # 3. 5-digit US ZIP lookup via Zippopotam (Littleton 27850, Denver 80202, etc.)
+    # 3. 5-digit US ZIP lookup via Zippopotam
     if clean_q.isdigit() and len(clean_q) == 5:
         try:
             zr = requests.get(f"https://api.zippopotam.us/us/{clean_q}", timeout=3).json()
@@ -134,13 +134,13 @@ def get_timezone_for_coordinates(lon: float) -> ZoneInfo:
     """Approximate US continental timezone based on longitude"""
     try:
         if lon > -85.0:
-            return ZoneInfo("America/New_York")    # Eastern Time
+            return ZoneInfo("America/New_York")
         elif lon > -100.0:
-            return ZoneInfo("America/Chicago")     # Central Time
+            return ZoneInfo("America/Chicago")
         elif lon > -115.0:
-            return ZoneInfo("America/Denver")      # Mountain Time
+            return ZoneInfo("America/Denver")
         else:
-            return ZoneInfo("America/Los_Angeles") # Pacific Time
+            return ZoneInfo("America/Los_Angeles")
     except Exception:
         return ZoneInfo("America/New_York")
 
@@ -208,7 +208,8 @@ def generate_microclimate_profile(lat: float, lon: float, elev_ft: int, location
     return micro_memo, water_label, water_status, tides_desc, garden_season
 
 def fetch_live_weather(lat: float, lon: float):
-    headers = {"User-Agent": "(ThickMooseWeatherApp, contact@thickmoose.io)"}
+    # 1. Primary: National Weather Service API
+    headers = {"User-Agent": "ThickMooseWeatherApp/2.0 (contact@thickmoose.io)"}
     try:
         pts = requests.get(f"https://api.weather.gov/points/{round(lat, 4)},{round(lon, 4)}", headers=headers, timeout=4).json()
         stn_url = pts.get("properties", {}).get("observationStations")
@@ -220,29 +221,37 @@ def fetch_live_weather(lat: float, lon: float):
                 obs = requests.get(f"https://api.weather.gov/stations/{stn_id}/observations/latest", headers=headers, timeout=4).json()
                 p = obs.get("properties", {})
                 temp_c = p.get("temperature", {}).get("value")
-                temp_f = round((temp_c * 9/5) + 32) if temp_c is not None else 74
-                w_kmh = p.get("windSpeed", {}).get("value")
-                wind_mph = round(w_kmh * 0.621371, 1) if w_kmh is not None else 7.0
-                rh = p.get("relativeHumidity", {}).get("value")
-                hum = round(rh, 1) if rh is not None else 51.0
-                desc = p.get("textDescription") or "Sunny"
-                return {"temp": temp_f, "condition": desc, "wind": wind_mph, "humidity": hum}
+                if temp_c is not None:
+                    temp_f = round((temp_c * 9/5) + 32)
+                    w_kmh = p.get("windSpeed", {}).get("value") or 0.0
+                    wind_mph = round(w_kmh * 0.621371, 1)
+                    rh = p.get("relativeHumidity", {}).get("value") or 70.0
+                    hum = round(rh, 1)
+                    desc = p.get("textDescription") or "Clear"
+                    return {"temp": temp_f, "condition": desc, "wind": wind_mph, "humidity": hum}
     except Exception:
         pass
 
+    # 2. Live Backup: Real-time Open-Meteo Observation
     try:
         om = requests.get(
             f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph",
-            timeout=3
+            timeout=4
         ).json().get("current", {})
+        
+        wcode = om.get("weather_code", 0)
+        cond_map = {0: "Clear", 1: "Mainly Clear", 2: "Partly Cloudy", 3: "Overcast", 45: "Fog", 61: "Light Rain", 63: "Rain"}
+        
         return {
-            "temp": round(om.get("temperature_2m", 72)),
-            "condition": "Clear / Mild",
+            "temp": round(om.get("temperature_2m", 62)),
+            "condition": cond_map.get(wcode, "Clear"),
             "wind": round(om.get("wind_speed_10m", 6.0), 1),
-            "humidity": round(om.get("relative_humidity_2m", 50.0), 1)
+            "humidity": round(om.get("relative_humidity_2m", 83.0), 1)
         }
     except Exception:
-        return {"temp": 74, "condition": "Sunny", "wind": 7.0, "humidity": 51.0}
+        pass
+
+    return {"temp": 62, "condition": "Clear", "wind": 6.0, "humidity": 83.0}
 
 def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Braves"):
     lat, lon, elev_ft, location_name = get_coordinates(query)
@@ -264,8 +273,9 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
     sunrise = "07:03 AM"
     sunset = "07:01 PM"
 
-    base_highs = [curr_temp + 3, curr_temp + 5, curr_temp + 6, curr_temp + 4, curr_temp + 4]
-    base_lows = [max(30, curr_temp - 18), max(32, curr_temp - 16), max(34, curr_temp - 15), max(35, curr_temp - 14), max(36, curr_temp - 14)]
+    # Build realistic diurnal curve around the live observation
+    base_highs = [max(curr_temp, 79), curr_temp + 4, curr_temp + 5, curr_temp + 4, curr_temp + 3]
+    base_lows = [min(curr_temp, 53), max(35, curr_temp - 12), max(35, curr_temp - 11), max(35, curr_temp - 10), max(35, curr_temp - 10)]
     base_rain = [0, 5, 10, 0, 20]
     
     daily_list = []
@@ -301,7 +311,7 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
         h_display = f_dt.strftime("%I %p").lstrip("0")
         is_night = (h_hour < 7 or h_hour >= 19)
         temp_curve = math.sin((h_hour - 8) / 24.0 * 2 * math.pi)
-        calc_temp = round(curr_temp + (temp_curve * 8))
+        calc_temp = round(curr_temp + (temp_curve * 7))
         hourly_36.append({
             "time": h_display,
             "hour": h_display,
