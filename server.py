@@ -11,44 +11,31 @@ import flet.fastapi as flet_fastapi
 load_dotenv()
 
 LOCAL_MICROCLIMATES = {
-    # --- Southern New Hanover / Coastal & River Corridors ---
-    "28412": (34.1378, -77.9150, "Wilmington (28412 / Lords Creek & River Road), NC"),
-    "28409": (34.1750, -77.8760, "Wilmington (28409 / Masonboro Sound), NC"),
-    "28428": (34.0350, -77.8930, "Carolina Beach / Pleasure Island (28428), NC"),
-    "28449": (33.9930, -77.9080, "Kure Beach / Fort Fisher (28449), NC"),
-
-    # --- Central & Northern Wilmington ---
-    "28403": (34.2180, -77.8920, "Wilmington (28403 / Midtown & UNCW), NC"),
-    "28401": (34.2380, -77.9450, "Wilmington (28401 / Historic Riverfront), NC"),
-    "28405": (34.2620, -77.8710, "Wilmington (28405 / Ogden & Landfall), NC"),
-    "28411": (34.3050, -77.8020, "Porters Neck & Middle Sound (28411), NC"),
-
-    # --- Barrier Islands (Direct Atlantic / Sea Breeze Front) ---
-    "28480": (34.2130, -77.7960, "Wrightsville Beach (28480), NC"),
-    "28445": (34.3720, -77.6080, "Surf City & Topsail Island (28445), NC"),
-
-    # --- Brunswick County / Lower Cape Fear River & Marsh ---
-    "28451": (34.2350, -78.0190, "Leland & Belville (28451), NC"),
-    "28461": (33.9210, -78.0200, "Southport & Oak Island (28461), NC"),
-    "28470": (33.9170, -78.3840, "Shallotte & Ocean Isle (28470), NC"),
-
-    # --- Inland Pender & Northern Pine Flats ---
-    "28429": (34.3510, -77.9040, "Castle Hayne & Cape Fear River Flat (28429), NC"),
-    "28443": (34.3640, -77.7120, "Hampstead & Topsail Sound (28443), NC"),
-    "28425": (34.5440, -77.9310, "Burgaw & Interior Pender Plain (28425), NC"),
+    # Precision local overrides for Southeastern NC
+    "28412": (34.1378, -77.9150, 15, "Wilmington (28412 / Lords Creek & River Rd), NC"),
+    "28409": (34.1750, -77.8760, 20, "Wilmington (28409 / Masonboro Sound), NC"),
+    "28428": (34.0350, -77.8930, 7, "Carolina Beach / Pleasure Island (28428), NC"),
+    "28449": (33.9930, -77.9080, 5, "Kure Beach / Fort Fisher (28449), NC"),
+    "28480": (34.2130, -77.7960, 8, "Wrightsville Beach (28480), NC"),
+    "28403": (34.2180, -77.8920, 35, "Wilmington (28403 / Midtown & UNCW), NC"),
+    "28401": (34.2380, -77.9450, 30, "Wilmington (28401 / Historic Riverfront), NC"),
+    "28405": (34.2620, -77.8710, 40, "Wilmington (28405 / Ogden & Landfall), NC"),
+    "28411": (34.3050, -77.8020, 30, "Porters Neck & Middle Sound (28411), NC"),
+    "28451": (34.2350, -78.0190, 45, "Leland & Belville (28451), NC"),
+    "28461": (33.9210, -78.0200, 20, "Southport & Oak Island (28461), NC"),
 }
 
 SPORTS_DB = {
     "panthers": ("Carolina Panthers (NFL)", "Bank of America Stadium (Charlotte, NC)", "Sunday 1:00 PM vs Falcons", "76°F, Sunny, Wind 5 mph"),
-    "carolina panthers": ("Carolina Panthers (NFL)", "Bank of America Stadium (Charlotte, NC)", "Sunday 1:00 PM vs Falcons", "76°F, Sunny, Wind 5 mph"),
     "braves": ("Atlanta Braves (MLB)", "Truist Park (Atlanta, GA)", "Today 7:20 PM vs Marlins", "74°F, Clear sky, Wind 4 mph"),
-    "atlanta braves": ("Atlanta Braves (MLB)", "Truist Park (Atlanta, GA)", "Today 7:20 PM vs Marlins", "74°F, Clear sky, Wind 4 mph"),
     "wolfpack": ("NC State Wolfpack (NCAA)", "Carter-Finley Stadium (Raleigh, NC)", "Saturday 3:30 PM", "80°F, Partly cloudy, Wind 6 mph"),
-    "nc state": ("NC State Wolfpack (NCAA)", "Carter-Finley Stadium (Raleigh, NC)", "Saturday 3:30 PM", "80°F, Partly cloudy, Wind 6 mph"),
     "tar heels": ("UNC Tar Heels (NCAA)", "Kenan Memorial Stadium (Chapel Hill, NC)", "Saturday 12:00 PM", "78°F, Mostly sunny, Wind 4 mph"),
-    "unc": ("UNC Tar Heels (NCAA)", "Kenan Memorial Stadium (Chapel Hill, NC)", "Saturday 12:00 PM", "78°F, Mostly sunny, Wind 4 mph"),
     "duke": ("Duke Blue Devils (NCAA)", "Wallace Wade Stadium (Durham, NC)", "Saturday 7:00 PM", "72°F, Clear sky, Wind 3 mph"),
-    "hurricanes": ("Carolina Hurricanes (NHL)", "Lenovo Center (Raleigh, NC)", "Thursday 7:00 PM", "68°F (Indoor Arena)")
+    "hurricanes": ("Carolina Hurricanes (NHL)", "Lenovo Center (Raleigh, NC)", "Thursday 7:00 PM", "68°F (Indoor Arena)"),
+    "broncos": ("Denver Broncos (NFL)", "Empower Field at Mile High (Denver, CO)", "Sunday 4:25 PM", "62°F, High plains breeze, Wind 8 mph"),
+    "cowboys": ("Dallas Cowboys (NFL)", "AT&T Stadium (Arlington, TX)", "Sunday 1:00 PM", "72°F (Climate-controlled)"),
+    "eagles": ("Philadelphia Eagles (NFL)", "Lincoln Financial Field (Philadelphia, PA)", "Sunday 1:00 PM", "65°F, Crisp autumn air, Wind 7 mph"),
+    "chiefs": ("Kansas City Chiefs (NFL)", "Arrowhead Stadium (Kansas City, MO)", "Sunday 4:25 PM", "68°F, Clear sky, Wind 9 mph"),
 }
 
 def auto_detect_location():
@@ -66,18 +53,123 @@ def auto_detect_location():
 
 def get_coordinates(query: str):
     clean_q = str(query).strip()
-    if clean_q in LOCAL_MICROCLIMATES:
-        return LOCAL_MICROCLIMATES[clean_q]
-    if clean_q.isdigit() and len(clean_q) == 5:
+
+    # 1. Direct GPS Lat/Lon coordinates from browser (e.g. "34.1378,-77.9150")
+    if "," in clean_q:
+        parts = [p.strip() for p in clean_q.split(",")]
         try:
-            r = requests.get(f"https://geocoding-api.open-meteo.com/v1/search?name={clean_q}&count=1&country=US&language=en&format=json", timeout=4).json()
-            res = r.get("results", [])
-            if res:
-                t = res[0]
-                return float(t["latitude"]), float(t["longitude"]), f"{t.get('name', clean_q)}, {t.get('admin1', '')} ({clean_q})".strip(", ")
-        except Exception:
+            lat_f = float(parts[0])
+            lon_f = float(parts[1])
+            loc_label = f"Location ({round(lat_f, 2)}, {round(lon_f, 2)})"
+            elev_ft = 50
+            try:
+                rev = requests.get(
+                    f"https://nominatim.openstreetmap.org/reverse?lat={lat_f}&lon={lon_f}&format=json",
+                    headers={"User-Agent": "ThickMooseWeatherApp/1.0"},
+                    timeout=3
+                ).json()
+                addr = rev.get("address", {})
+                city = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("suburb") or addr.get("county") or "Local Area"
+                state = addr.get("state", "")
+                loc_label = f"{city}, {state} (GPS)" if state else city
+            except Exception:
+                pass
+            try:
+                el_r = requests.get(f"https://api.open-meteo.com/v1/elevation?latitude={lat_f}&longitude={lon_f}", timeout=3).json()
+                elev_ft = round(el_r.get("elevation", [15])[0] * 3.28084)
+            except Exception:
+                pass
+            return lat_f, lon_f, elev_ft, loc_label
+        except ValueError:
             pass
-    return 34.1378, -77.9150, "Wilmington (28412 / Lords Creek), NC"
+
+    # 2. Known local microclimate ZIP overrides
+    if clean_q in LOCAL_MICROCLIMATES:
+        lat, lon, elev, name = LOCAL_MICROCLIMATES[clean_q]
+        return lat, lon, elev, name
+
+    # 3. Dynamic nationwide US ZIP & City geocoding with elevation
+    try:
+        r = requests.get(f"https://geocoding-api.open-meteo.com/v1/search?name={clean_q}&count=1&country=US&language=en&format=json", timeout=4).json()
+        res = r.get("results", [])
+        if res:
+            t = res[0]
+            lat = float(t["latitude"])
+            lon = float(t["longitude"])
+            elev_m = t.get("elevation", 15) or 15
+            elev_ft = round(elev_m * 3.28084)
+            label = f"{t.get('name', clean_q)}, {t.get('admin1', '')} ({clean_q})".strip(", ")
+            return lat, lon, elev_ft, label
+    except Exception:
+        pass
+
+    return 34.1378, -77.9150, 15, "Wilmington (28412 / Lords Creek), NC"
+
+def is_coastal_region(lat: float, lon: float) -> bool:
+    """Rough check whether coordinates are in an Atlantic, Gulf, or Pacific coastal corridor"""
+    # Atlantic Coast
+    if lon > -81.5 and lat > 25.0 and (lon > -78.5 or (lat > 37.0 and lon > -76.0)):
+        return True
+    # Gulf Coast
+    if lat < 30.5 and -98.0 < lon < -82.0:
+        return True
+    # Pacific Coast
+    if lon < -117.0 and lat > 32.0:
+        return True
+    return False
+
+def generate_microclimate_profile(lat: float, lon: float, elev_ft: int, location_name: str, temp_f: int, wind_mph: float, hum: float):
+    is_coast = is_coastal_region(lat, lon)
+    
+    # 1. Mountain / High Elevation Zone (> 3,000 ft)
+    if elev_ft >= 3000:
+        micro_memo = f"High-Altitude Alpine Sector (Elev. {elev_ft:,} ft): Reduced barometric pressure, rapid radiation cooling at night, and elevated UV index."
+        water_label = f"Mountain Streams & Headwaters ({location_name})"
+        water_status = f"Clear montane runoffs with brisk surface currents. Elevation: {elev_ft:,} ft."
+        tides_desc = "Non-tidal alpine watershed. Stream flow index stable."
+        garden_season = [
+            {"item": "Cold-Hardy Greens & Roots", "action": "Short-Season Sowing", "timing": "Early spring to mid-summer harvest"},
+            {"item": "Brassicas & Potatoes", "action": "Frost-Tolerant Maintenance", "timing": "Protect from high-elevation early freezes"},
+            {"item": "Alpine Berries", "action": "Winter Dormancy Prep", "timing": "Mulch root crowns before hard mountain freezes"}
+        ]
+
+    # 2. Foothills & High Plains (1,000 - 2,999 ft)
+    elif elev_ft >= 1000:
+        micro_memo = f"Piedmont / High Plains Basin (Elev. {elev_ft:,} ft): Significant diurnal thermal swings. Moderate boundary layer winds."
+        water_label = f"Regional Lakes & Tributaries near {location_name}"
+        water_status = f"Reservoirs and inland impoundments showing stable water clarity with surface temp ~{temp_f - 4}°F."
+        tides_desc = "Inland hydrological basin. River pool stages normal."
+        garden_season = [
+            {"item": "Cool-Season Brassicas", "action": "Active Fall Window", "timing": "Direct sow August through October"},
+            {"item": "Garlic & Perennial Herbs", "action": "Pre-Winter Planting", "timing": "Plant cloves 4-6 weeks before ground freeze"},
+            {"item": "Winter Greens", "action": "Row Cover Production", "timing": "Harvest steadily through mild cold spells"}
+        ]
+
+    # 3. Coastal & Maritime Shoreline (< 150 ft and near ocean)
+    elif is_coast:
+        micro_memo = f"Maritime Sea-Breeze Corridor (Elev. {elev_ft} ft): Marine thermal buffering keeps daytime peaks moderate and dampens overnight drops. Elevated ambient salt spray and onshore sea breeze."
+        water_label = f"Coastal Sounds & Atlantic/Gulf Waters ({location_name})"
+        water_status = f"Swell: 2-4 ft clean breakers. Sea surface temp ~{temp_f}°F with active littoral drift."
+        tides_desc = "Semi-diurnal coastal tides active. Clean inlet navigation on rising water."
+        garden_season = [
+            {"item": "Kale, Collards & Spinach", "action": "Direct Sowing Window", "timing": "Optimal coastal planting through November"},
+            {"item": "Fall Tomatoes & Peppers", "action": "Extended Coastal Harvest", "timing": "Productive until first late coastal freeze"},
+            {"item": "Carrots, Radishes & Beets", "action": "Direct Sowing Window", "timing": "Prime root-crop establishment period"}
+        ]
+
+    # 4. Interior Lowlands & River Plains (< 1,000 ft inland)
+    else:
+        micro_memo = f"Continental Interior Lowland (Elev. {elev_ft} ft): Calm nocturnal surface winds with strong morning temperature inversions along valley basins."
+        water_label = f"River Basins & Inland Reservoirs ({location_name})"
+        water_status = f"Calm river stages with minimal chop. Surface water temperature ~{temp_f - 2}°F."
+        tides_desc = "Continental inland freshwater system. Zero tidal influence."
+        garden_season = [
+            {"item": "Spinach & Winter Greens", "action": "Late Autumn Sowing", "timing": "Cold frame establishment for winter picking"},
+            {"item": "Cover Crops (Clover/Rye)", "action": "Soil Restoration Sowing", "timing": "Direct sow to build winter soil biology"},
+            {"item": "Root Vegetables", "action": "Storage Harvest", "timing": "Lift and store before ground freezes"}
+        ]
+
+    return micro_memo, water_label, water_status, tides_desc, garden_season
 
 def fetch_live_weather(lat: float, lon: float):
     headers = {"User-Agent": "(ThickMooseWeatherApp, contact@thickmoose.io)"}
@@ -101,56 +193,41 @@ def fetch_live_weather(lat: float, lon: float):
                 return {"temp": temp_f, "condition": desc, "wind": wind_mph, "humidity": hum}
     except Exception:
         pass
-    return {"temp": 74, "condition": "Sunny", "wind": 7.0, "humidity": 51.0}
-def apply_microclimate_offsets(lat: float, lon: float, query: str, temp_f: int, wind_mph: float, hum: float):
-    """
-    Applies empirical microclimate adjustments:
-    - Barrier Islands (28480, 28428, 28449, 28445): Maritime moderation (cooler summer days, warmer nights, higher onshore wind).
-    - Inland Pine / River Basins (28451, 28429, 28425): Greater diurnal spread (warmer midday, cooler radiated dawns, calmer surface wind).
-    """
-    q = str(query).strip()
-    
-    # Barrier Islands & Open Sounds (Atlantic Front)
-    if q in ["28480", "28428", "28449", "28445"]:
-        mod_temp = temp_f - 2 if temp_f > 75 else temp_f + 2
-        mod_wind = round(wind_mph * 1.35, 1)
-        mod_hum = min(100.0, hum + 6.0)
-        sector_note = "Direct maritime influence: ocean breeze cooling with elevated coastal chop."
-        return mod_temp, mod_wind, mod_hum, sector_note
 
-    # Tidal Creeks & Estuaries (Lords Creek, Masonboro, River Road)
-    elif q in ["28412", "28409", "28461"]:
-        mod_temp = temp_f
-        mod_wind = round(wind_mph * 1.1, 1)
-        mod_hum = min(100.0, hum + 3.0)
-        sector_note = "Estuarine tidal buffer: stable humidity and moderate breeze along marsh contours."
-        return mod_temp, mod_wind, mod_hum, sector_note
-
-    # Inland Pine Flatwoods & River Basins (Leland, Castle Hayne, Burgaw)
-    elif q in ["28451", "28429", "28425"]:
-        mod_temp = temp_f + 3 if temp_f > 75 else temp_f - 3
-        mod_wind = round(max(2.0, wind_mph * 0.8), 1)
-        mod_hum = max(20.0, hum - 4.0)
-        sector_note = "Inland thermal pocket: reduced sea breeze influence with pronounced diurnal temperature swings."
-        return mod_temp, mod_wind, mod_hum, sector_note
-
-    return temp_f, wind_mph, hum, "Standard regional microclimate profile."
+    # Open-Meteo fallback if outside US NWS boundaries
+    try:
+        om = requests.get(
+            f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph",
+            timeout=3
+        ).json().get("current", {})
+        return {
+            "temp": round(om.get("temperature_2m", 72)),
+            "condition": "Clear / Mild",
+            "wind": round(om.get("wind_speed_10m", 6.0), 1),
+            "humidity": round(om.get("relative_humidity_2m", 50.0), 1)
+        }
+    except Exception:
+        return {"temp": 74, "condition": "Sunny", "wind": 7.0, "humidity": 51.0}
 
 def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Braves"):
-    lat, lon, location_name = get_coordinates(query)
+    lat, lon, elev_ft, location_name = get_coordinates(query)
     
     live = fetch_live_weather(lat, lon)
+    curr_temp = live["temp"]
     curr_cond = live["condition"]
-    curr_temp, curr_wind, curr_hum, micro_note = apply_microclimate_offsets(
-        lat, lon, query, live["temp"], live["wind"], live["humidity"]
+    curr_wind = live["wind"]
+    curr_hum = live["humidity"]
+
+    micro_memo, water_label, water_status, tides_desc, garden_season = generate_microclimate_profile(
+        lat, lon, elev_ft, location_name, curr_temp, curr_wind, curr_hum
     )
 
     now = datetime.now()
     sunrise = "07:03 AM"
     sunset = "07:01 PM"
 
-    base_highs = [80, 83, 84, 84, 84]
-    base_lows = [53, 57, 59, 62, 65]
+    base_highs = [curr_temp + 3, curr_temp + 5, curr_temp + 6, curr_temp + 4, curr_temp + 4]
+    base_lows = [max(30, curr_temp - 18), max(32, curr_temp - 16), max(34, curr_temp - 15), max(35, curr_temp - 14), max(36, curr_temp - 14)]
     base_rain = [0, 5, 10, 0, 20]
     
     daily_list = []
@@ -173,8 +250,8 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
             "sunset": sunset,
             "moon_rise": "08:14 PM",
             "moon_set": "07:42 AM",
-            "day_summary": f"Sunny and clear skies with highs near {h_val}°F and light westerly breezes.",
-            "night_summary": f"Crisp and clear autumn conditions with overnight lows cooling to {l_val}°F."
+            "day_summary": f"Fair conditions with highs near {h_val}°F and light prevailing winds.",
+            "night_summary": f"Clear night skies cooling down to approximately {l_val}°F."
         })
 
     hourly_36 = []
@@ -184,7 +261,7 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
         h_display = f_dt.strftime("%I %p").lstrip("0")
         is_night = (h_hour < 7 or h_hour >= 19)
         temp_curve = math.sin((h_hour - 8) / 24.0 * 2 * math.pi)
-        calc_temp = round(base_highs[0] - 14 + (temp_curve * 14))
+        calc_temp = round(curr_temp + (temp_curve * 8))
         hourly_36.append({
             "time": h_display,
             "hour": h_display,
@@ -207,17 +284,17 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
                 break
         if not matched and s_key:
             sports_events.append({
-                "title": f"{s_key.title()} (Custom Matchup)",
-                "venue": f"Regional Arena / Field near {location_name}",
-                "time": "Upcoming Weekend Fixture",
-                "conditions": f"{base_highs[0]}°F, Sunny, Wind {curr_wind} mph"
+                "title": f"{s_key.title()} (Matchup)",
+                "venue": f"Local Stadium / Arena near {location_name}",
+                "time": "Upcoming Match Fixture",
+                "conditions": f"{curr_temp}°F, {curr_cond}, Wind {curr_wind} mph"
             })
 
     tonight_low = daily_list[0]["low"]
     radar_url = f"https://www.rainviewer.com/map.html?loc={round(lat, 4)},{round(lon, 4)},8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=1&layer=radar&sm=1&sn=1"
 
     return {
-        "lat": lat, "lon": lon, "location_name": location_name,
+        "lat": lat, "lon": lon, "elevation_ft": elev_ft, "location_name": location_name,
         "radar_url": radar_url,
         "current": {
             "temp": curr_temp,
@@ -225,26 +302,25 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
             "wind": curr_wind,
             "condition": curr_cond,
             "is_night": (now.hour < 7 or now.hour >= 19),
-            "uv_index": 4.0,
+            "uv_index": 4.0 if elev_ft < 4000 else 6.5,
             "sunrise": sunrise,
             "sunset": sunset,
             "moon_rise": "08:14 PM",
             "moon_set": "07:42 AM",
             "precip_summary": "Precip Now: 0% | Next 24h Max: 0% (Dry profile)",
-            "rain_duration": "Zero precipitation expected across the coastal plain."
+            "rain_duration": "Stable atmospheric profile across the immediate region."
         },
         "hourly_36": hourly_36,
         "daily": daily_list,
         "aqi": {"aqi": 32, "category": "Good"},
         "weather_climate": {
-            "microclimate_memo": micro_note,
-            "enso_index": "NOAA Climate Prediction Center: Neutral ENSO conditions prevailing across equatorial Pacific.",
-            "tropical_updates": "National Hurricane Center: No active tropical storms or disturbances threatening North Carolina waters.",
-            "coastal_waters": f"Sector: {location_name}. Water Temp: 76°F. Swell: 2-3 ft clean breakers with light offshore winds.",
-            "tides": "High Tide: 04:45 AM (+4.6 ft) | Low Tide: 11:10 AM (-0.1 ft) | Next High Tide: 05:12 PM (+4.8 ft).",
-            "lake_conditions": f"Cape Fear Estuary & Lords Creek: Calm surface, light current, ideal water clarity.",
-            "extreme_weather_24h": "No severe storm watches, convective warnings, or frost advisories in effect.",
-            "drought_index": "Soil moisture index balanced across coastal southeastern North Carolina."
+            "microclimate_memo": micro_memo,
+            "enso_index": "NOAA Climate Prediction Center: Neutral ENSO conditions prevailing across North America.",
+            "tropical_updates": "National Hurricane Center / Storm Prediction Center: No convective or tropical threats active in this sector.",
+            "watershed_conditions": water_status,
+            "tides_or_lake_status": tides_desc,
+            "extreme_weather_24h": "No severe storm watches, flood advisories, or convective warnings in effect for this grid point.",
+            "drought_index": "Regional soil moisture balance normal."
         },
         "outdoor_activities": {
             "walking": {
@@ -261,11 +337,11 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
             },
             "boating": {
                 "score": max(30, min(99, round(95 - (curr_wind * 2.2)))),
-                "details": f"Surface wind {curr_wind} mph. {'Favorable coastal and waterway conditions with chop under 1 ft.' if curr_wind < 10 else 'Choppy sound and river waters; secure gear.' if curr_wind < 18 else 'Caution: Rough surface conditions and steep chop.'}"
+                "details": f"Surface wind {curr_wind} mph. {'Favorable water conditions with chop under 1 ft.' if curr_wind < 10 else 'Moderate surface chop; secure gear.' if curr_wind < 18 else 'Caution: Rough surface conditions and steep wind waves.'}"
             },
             "fishing": {
                 "score": max(50, min(96, round(88 - (curr_wind * 0.8)))),
-                "details": f"Surface temp index aligned with {curr_temp}°F ambient air. Moderate tidal movement along marsh contours; wind {curr_wind} mph."
+                "details": f"Ambient {curr_temp}°F. {'Stable barometric pressure favors active feeding along structure and drop-offs.' if curr_wind < 12 else 'Turbulent surface chop dispersing baitfish along windy banks.'}"
             },
             "camping": {
                 "score": max(40, min(99, round(98 - abs(tonight_low - 55) * 1.2 - (curr_wind * 0.8)))),
@@ -277,7 +353,7 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
             },
             "hunting": {
                 "score": 88 if curr_wind < 10 else 68,
-                "details": f"Scent dispersion rate moderate with {curr_wind} mph winds. Early dawn/dusk feeding activity favored."
+                "details": f"Scent dispersion rate moderate with {curr_wind} mph winds. Early dawn/dusk movement favored."
             }
         },
         "lifestyle": {
@@ -290,31 +366,27 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
                 "hair": f"Frizz Alert: Humidity is elevated at {curr_hum}%. Anti-humidity serum or updo recommended." if curr_hum > 70 else f"Low frizz risk; moderate relative humidity ({curr_hum}%). Clean, lasting hold.",
                 "makeup": f"High dew point/humidity ({curr_hum}%): use oil-free primer and setting spray." if curr_hum > 75 else f"Stable humidity ({curr_hum}%): standard foundation and moisturizers will hold well."
             },
-            "allergen": "Regional ragweed and grass pollen low-to-moderate along coastal corridors.",
-            "mosquito_fly": f"Bug activity elevated around damp areas due to {curr_hum}% humidity." if curr_hum > 75 and curr_temp > 68 else "Bug activity low to minimal under current air density.",
-            "leaf_change": "Status: Early transition (subtle color shifts in wetland hardwoods).",
-            "planting_harvest": [
-                {"item": "Kale, Collards & Spinach", "action": "Direct Sowing Window", "timing": "Optimal fall planting through October"},
-                {"item": "Fall Tomatoes & Peppers", "action": "Harvesting Peak", "timing": "Active harvest through first light frost"},
-                {"item": "Carrots, Radishes & Beets", "action": "Direct Sowing Window", "timing": "Prime root-crop establishment period"}
-            ]
+            "allergen": "Regional ragweed and tree/grass pollen indices low-to-moderate.",
+            "mosquito_fly": f"Bug activity elevated around damp vegetation due to {curr_hum}% humidity." if curr_hum > 75 and curr_temp > 68 else "Bug activity low to minimal under current air density.",
+            "leaf_change": "Status: Early seasonal foliage transition.",
+            "planting_harvest": garden_season
         },
         "sporting_event": {"events": sports_events},
         "astronomy": {
             "sunrise": sunrise,
             "sunset": sunset,
-            "moon_phase": "Waning Gibbous (88% illumination)",
+            "moon_phase": "Waning Gibbous",
             "darkness_window": f"{sunset} through {sunrise}",
-            "stargazing_rating": "95/100 (Exceptional) — Crystal-clear atmosphere with virtually zero cloud cover.",
+            "stargazing_rating": "95/100 (Exceptional) — Clear atmosphere with minimal cloud cover.",
             "visible_planets": [
-                "Saturn (Magnitude +0.6, visible in Aquarius across southern sky all evening)",
+                "Saturn (Magnitude +0.6, visible across southern sky all evening)",
                 "Jupiter (Magnitude -2.4, blazing bright in Taurus starting at 10:45 PM)",
                 "Venus (Brilliant in southwestern evening sky until 8:15 PM)",
                 "Mars (Visible in eastern predawn sky after 2:30 AM)"
             ],
             "celestial_events": [
                 {"title": "🛰️ ISS Overhead Transit", "time": "08:12 PM – 08:18 PM", "direction": "NW to SE (Max elevation 64°)", "notes": "Bright naked-eye magnitude pass"},
-                {"title": "🪐 Saturn Ring Plane Alignment", "time": "09:30 PM – 11:30 PM", "direction": "Direct South", "notes": "Optimal telescope seeing under crisp autumn atmosphere"},
+                {"title": "🪐 Saturn Ring Plane Alignment", "time": "09:30 PM – 11:30 PM", "direction": "Direct South", "notes": "Optimal telescope seeing under crisp night skies"},
                 {"title": "🌌 Andromeda Galaxy (M31)", "time": "10:00 PM – Dawn", "direction": "High Northeast", "notes": "Visible to naked eye and binoculars away from direct streetlights"}
             ]
         }
