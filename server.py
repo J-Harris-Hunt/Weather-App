@@ -89,7 +89,29 @@ def get_coordinates(query: str):
         lat, lon, elev, name = LOCAL_MICROCLIMATES[clean_q]
         return lat, lon, elev, name
 
-    # 3. Dynamic nationwide US ZIP & City geocoding with elevation
+    # 3. 5-digit US ZIP lookup via Zippopotam (Littleton 27850, Denver 80202, etc.)
+    if clean_q.isdigit() and len(clean_q) == 5:
+        try:
+            zr = requests.get(f"https://api.zippopotam.us/us/{clean_q}", timeout=3).json()
+            places = zr.get("places", [])
+            if places:
+                p = places[0]
+                lat = float(p.get("latitude"))
+                lon = float(p.get("longitude"))
+                city = p.get("place name", clean_q)
+                state = p.get("state abbreviation", "")
+                label = f"{city}, {state} ({clean_q})"
+                elev_ft = 50
+                try:
+                    el_r = requests.get(f"https://api.open-meteo.com/v1/elevation?latitude={lat}&longitude={lon}", timeout=3).json()
+                    elev_ft = round(el_r.get("elevation", [15])[0] * 3.28084)
+                except Exception:
+                    pass
+                return lat, lon, elev_ft, label
+        except Exception:
+            pass
+
+    # 4. City/Town name lookup via Open-Meteo
     try:
         r = requests.get(f"https://geocoding-api.open-meteo.com/v1/search?name={clean_q}&count=1&country=US&language=en&format=json", timeout=4).json()
         res = r.get("results", [])
@@ -99,7 +121,9 @@ def get_coordinates(query: str):
             lon = float(t["longitude"])
             elev_m = t.get("elevation", 15) or 15
             elev_ft = round(elev_m * 3.28084)
-            label = f"{t.get('name', clean_q)}, {t.get('admin1', '')} ({clean_q})".strip(", ")
+            name = t.get("name", clean_q)
+            admin = t.get("admin1", "")
+            label = f"{name}, {admin} ({clean_q})" if admin else name
             return lat, lon, elev_ft, label
     except Exception:
         pass
