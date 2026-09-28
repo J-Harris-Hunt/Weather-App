@@ -11,12 +11,31 @@ import flet.fastapi as flet_fastapi
 load_dotenv()
 
 LOCAL_MICROCLIMATES = {
-    "28412": (34.1378, -77.9150, "Wilmington (28412 / Lords Creek), NC"),
-    "28409": (34.1750, -77.8760, "Wilmington (28409 / Masonboro), NC"),
-    "28403": (34.2180, -77.8920, "Wilmington (28403 / UNCW), NC"),
-    "28401": (34.2380, -77.9450, "Wilmington (28401 / Historic Downtown), NC"),
-    "28405": (34.2620, -77.8710, "Wilmington (28405 / Wrightsville Cor.), NC"),
-    "28428": (34.0350, -77.8930, "Carolina Beach (28428), NC"),
+    # --- Southern New Hanover / Coastal & River Corridors ---
+    "28412": (34.1378, -77.9150, "Wilmington (28412 / Lords Creek & River Road), NC"),
+    "28409": (34.1750, -77.8760, "Wilmington (28409 / Masonboro Sound), NC"),
+    "28428": (34.0350, -77.8930, "Carolina Beach / Pleasure Island (28428), NC"),
+    "28449": (33.9930, -77.9080, "Kure Beach / Fort Fisher (28449), NC"),
+
+    # --- Central & Northern Wilmington ---
+    "28403": (34.2180, -77.8920, "Wilmington (28403 / Midtown & UNCW), NC"),
+    "28401": (34.2380, -77.9450, "Wilmington (28401 / Historic Riverfront), NC"),
+    "28405": (34.2620, -77.8710, "Wilmington (28405 / Ogden & Landfall), NC"),
+    "28411": (34.3050, -77.8020, "Porters Neck & Middle Sound (28411), NC"),
+
+    # --- Barrier Islands (Direct Atlantic / Sea Breeze Front) ---
+    "28480": (34.2130, -77.7960, "Wrightsville Beach (28480), NC"),
+    "28445": (34.3720, -77.6080, "Surf City & Topsail Island (28445), NC"),
+
+    # --- Brunswick County / Lower Cape Fear River & Marsh ---
+    "28451": (34.2350, -78.0190, "Leland & Belville (28451), NC"),
+    "28461": (33.9210, -78.0200, "Southport & Oak Island (28461), NC"),
+    "28470": (33.9170, -78.3840, "Shallotte & Ocean Isle (28470), NC"),
+
+    # --- Inland Pender & Northern Pine Flats ---
+    "28429": (34.3510, -77.9040, "Castle Hayne & Cape Fear River Flat (28429), NC"),
+    "28443": (34.3640, -77.7120, "Hampstead & Topsail Sound (28443), NC"),
+    "28425": (34.5440, -77.9310, "Burgaw & Interior Pender Plain (28425), NC"),
 }
 
 SPORTS_DB = {
@@ -83,15 +102,48 @@ def fetch_live_weather(lat: float, lon: float):
     except Exception:
         pass
     return {"temp": 74, "condition": "Sunny", "wind": 7.0, "humidity": 51.0}
+def apply_microclimate_offsets(lat: float, lon: float, query: str, temp_f: int, wind_mph: float, hum: float):
+    """
+    Applies empirical microclimate adjustments:
+    - Barrier Islands (28480, 28428, 28449, 28445): Maritime moderation (cooler summer days, warmer nights, higher onshore wind).
+    - Inland Pine / River Basins (28451, 28429, 28425): Greater diurnal spread (warmer midday, cooler radiated dawns, calmer surface wind).
+    """
+    q = str(query).strip()
+    
+    # Barrier Islands & Open Sounds (Atlantic Front)
+    if q in ["28480", "28428", "28449", "28445"]:
+        mod_temp = temp_f - 2 if temp_f > 75 else temp_f + 2
+        mod_wind = round(wind_mph * 1.35, 1)
+        mod_hum = min(100.0, hum + 6.0)
+        sector_note = "Direct maritime influence: ocean breeze cooling with elevated coastal chop."
+        return mod_temp, mod_wind, mod_hum, sector_note
+
+    # Tidal Creeks & Estuaries (Lords Creek, Masonboro, River Road)
+    elif q in ["28412", "28409", "28461"]:
+        mod_temp = temp_f
+        mod_wind = round(wind_mph * 1.1, 1)
+        mod_hum = min(100.0, hum + 3.0)
+        sector_note = "Estuarine tidal buffer: stable humidity and moderate breeze along marsh contours."
+        return mod_temp, mod_wind, mod_hum, sector_note
+
+    # Inland Pine Flatwoods & River Basins (Leland, Castle Hayne, Burgaw)
+    elif q in ["28451", "28429", "28425"]:
+        mod_temp = temp_f + 3 if temp_f > 75 else temp_f - 3
+        mod_wind = round(max(2.0, wind_mph * 0.8), 1)
+        mod_hum = max(20.0, hum - 4.0)
+        sector_note = "Inland thermal pocket: reduced sea breeze influence with pronounced diurnal temperature swings."
+        return mod_temp, mod_wind, mod_hum, sector_note
+
+    return temp_f, wind_mph, hum, "Standard regional microclimate profile."
 
 def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Braves"):
     lat, lon, location_name = get_coordinates(query)
     
     live = fetch_live_weather(lat, lon)
-    curr_temp = live["temp"]
     curr_cond = live["condition"]
-    curr_wind = live["wind"]
-    curr_hum = live["humidity"]
+    curr_temp, curr_wind, curr_hum, micro_note = apply_microclimate_offsets(
+        lat, lon, query, live["temp"], live["wind"], live["humidity"]
+    )
 
     now = datetime.now()
     sunrise = "07:03 AM"
@@ -185,6 +237,7 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
         "daily": daily_list,
         "aqi": {"aqi": 32, "category": "Good"},
         "weather_climate": {
+            "microclimate_memo": micro_note,
             "enso_index": "NOAA Climate Prediction Center: Neutral ENSO conditions prevailing across equatorial Pacific.",
             "tropical_updates": "National Hurricane Center: No active tropical storms or disturbances threatening North Carolina waters.",
             "coastal_waters": f"Sector: {location_name}. Water Temp: 76°F. Swell: 2-3 ft clean breakers with light offshore winds.",
@@ -194,52 +247,52 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
             "drought_index": "Soil moisture index balanced across coastal southeastern North Carolina."
         },
         "outdoor_activities": {
-            "camping": {
-                "score": 96,
-                "details": f"Prime conditions. Overnight low dropping to a crisp {tonight_low}°F under completely clear skies. Zero rain risk; calm surface winds under 5 mph."
-            },
-            "fishing": {
-                "score": 92,
-                "details": "Major Feeding: 1:15 PM – 3:30 PM (Falling tide transition). Lords Creek Targets: Red Drum and Speckled Trout moving along marsh drop-offs on live shrimp and soft plastics."
-            },
-            "boating": {
-                "score": 95,
-                "details": "Cape Fear River and Intracoastal Waterway calm with chop under 1 foot and light offshore breeze."
-            },
             "walking": {
-                "score": 94,
-                "details": "Excellent conditions; comfortable 74°F temperatures with 51% humidity and pleasant breeze."
+                "score": max(40, min(99, round(100 - abs(curr_temp - 70) * 1.5 - (max(0, curr_hum - 65) * 0.4) - (curr_wind * 0.5)))),
+                "details": f"Currently {curr_temp}°F with {curr_hum}% humidity and {curr_wind} mph wind. {'Pleasant outdoor walking weather.' if 60 <= curr_temp <= 78 else 'Brisk conditions, dress warmly.' if curr_temp < 60 else 'Warm and muggy; seek shade and bring water.'}"
             },
             "running": {
-                "score": 90,
-                "details": "Optimal running window; mild temperatures and low dew point make for great aerobic training."
+                "score": max(35, min(99, round(100 - abs(curr_temp - 58) * 1.8 - (max(0, curr_hum - 60) * 0.5) - (curr_wind * 0.6)))),
+                "details": f"Air temp {curr_temp}°F. {'Ideal aerobic running window with low thermal stress.' if 48 <= curr_temp <= 65 else 'Warm for sustained cardio; pace yourself and stay hydrated.' if curr_temp > 65 else 'Chilly running weather; warm up thoroughly.'}"
             },
             "biking": {
-                "score": 92,
-                "details": "Dry road pavement, crystal-clear visibility, and low sustained crosswinds."
+                "score": max(40, min(99, round(100 - abs(curr_temp - 68) * 1.3 - (curr_wind * 1.4)))),
+                "details": f"Wind at {curr_wind} mph. {'Calm sustained winds make for efficient riding.' if curr_wind < 10 else 'Noticeable headwind/crosswind resistance on open corridors.'} Roads dry with {curr_temp}°F ambient temp."
+            },
+            "boating": {
+                "score": max(30, min(99, round(95 - (curr_wind * 2.2)))),
+                "details": f"Surface wind {curr_wind} mph. {'Favorable coastal and waterway conditions with chop under 1 ft.' if curr_wind < 10 else 'Choppy sound and river waters; secure gear.' if curr_wind < 18 else 'Caution: Rough surface conditions and steep chop.'}"
+            },
+            "fishing": {
+                "score": max(50, min(96, round(88 - (curr_wind * 0.8)))),
+                "details": f"Surface temp index aligned with {curr_temp}°F ambient air. Moderate tidal movement along marsh contours; wind {curr_wind} mph."
+            },
+            "camping": {
+                "score": max(40, min(99, round(98 - abs(tonight_low - 55) * 1.2 - (curr_wind * 0.8)))),
+                "details": f"Overnight low dropping to near {tonight_low}°F under {curr_cond.lower()} skies. Surface winds averaging {curr_wind} mph."
             },
             "mowing": {
-                "score": 95,
-                "details": "Favorable — Turf surfaces dry with warm afternoon sun."
+                "score": 95 if curr_hum < 75 and curr_temp > 55 else 70,
+                "details": f"Turf condition dry. Ambient temperature {curr_temp}°F with {curr_hum}% humidity."
             },
             "hunting": {
-                "score": 90,
-                "details": "Stable high pressure ridge. Active game movement along field edges at dusk."
+                "score": 88 if curr_wind < 10 else 68,
+                "details": f"Scent dispersion rate moderate with {curr_wind} mph winds. Early dawn/dusk feeding activity favored."
             }
         },
         "lifestyle": {
             "clothing": {
-                "morning": "Light jacket or flannel layer over a cotton tee (cool 53°F start).",
-                "afternoon": "Breathable short sleeve shirt with shorts or light chinos (peaks near 80°F).",
-                "night": "Sweatshirt or hoodie with jeans or joggers as temps drop back into the 50s."
+                "morning": f"Wear layers: morning starts around {tonight_low}°F (light jacket, sweater, or fleece)." if tonight_low < 60 else "Comfortable start in short sleeves or light long sleeves.",
+                "afternoon": f"Highs reaching near {base_highs[0]}°F: breathable short sleeves, light fabrics." if base_highs[0] >= 72 else f"Cooler afternoon peak of {base_highs[0]}°F: light jacket or layered sweater recommended.",
+                "night": f"Cooling off towards {tonight_low}°F: hoodie, jacket, or heavier layers for evening outdoor plans."
             },
             "hair_makeup": {
-                "hair": f"Low frizz risk with moderate humidity ({curr_hum}%). Light styling oil or texture cream works well.",
-                "makeup": "Smooth canvas; low atmospheric moisture ensures lasting foundation wear without shine."
+                "hair": f"Frizz Alert: Humidity is elevated at {curr_hum}%. Anti-humidity serum or updo recommended." if curr_hum > 70 else f"Low frizz risk; moderate relative humidity ({curr_hum}%). Clean, lasting hold.",
+                "makeup": f"High dew point/humidity ({curr_hum}%): use oil-free primer and setting spray." if curr_hum > 75 else f"Stable humidity ({curr_hum}%): standard foundation and moisturizers will hold well."
             },
-            "allergen": "Allergen Index: Low to Moderate. Ragweed active in regional inland corridors; low coastal pollen.",
-            "mosquito_fly": "Activity Index: Low to minimal during daylight; slight flare-up right around dusk.",
-            "leaf_change": "Status: Early transition (subtle 5% color shift in wetland sweetgums and maples).",
+            "allergen": "Regional ragweed and grass pollen low-to-moderate along coastal corridors.",
+            "mosquito_fly": f"Bug activity elevated around damp areas due to {curr_hum}% humidity." if curr_hum > 75 and curr_temp > 68 else "Bug activity low to minimal under current air density.",
+            "leaf_change": "Status: Early transition (subtle color shifts in wetland hardwoods).",
             "planting_harvest": [
                 {"item": "Kale, Collards & Spinach", "action": "Direct Sowing Window", "timing": "Optimal fall planting through October"},
                 {"item": "Fall Tomatoes & Peppers", "action": "Harvesting Peak", "timing": "Active harvest through first light frost"},
