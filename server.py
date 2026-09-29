@@ -560,3 +560,27 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
             ]
         }
     }
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await flet_fastapi.app_manager.start()
+    yield
+    await flet_fastapi.app_manager.shutdown()
+
+app = FastAPI(title="Thick Moose Weather API", lifespan=lifespan)
+
+@app.get("/weather")
+def api_weather(query: str = "28412", sport_team: str = "Panthers, Braves"):
+    try:
+        return get_full_weather_data(query, sport_team)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+from main import main as flet_ui_main
+assets_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "assets"))
+app.mount("/", flet_fastapi.app(flet_ui_main, assets_dir=assets_dir))
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("server:app", host="0.0.0.0", port=port)
