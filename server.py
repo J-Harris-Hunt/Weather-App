@@ -825,7 +825,6 @@ def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC St
     tonight_low = daily_list[0]["low"]
     today_high = daily_list[0]["high"]
 
-    # In-App Radar View with Exact Parcel Pin & Past+Future Loop
     encoded_label = urllib.parse.quote(location_name)
     radar_url = f"/radar?lat={round(lat, 4)}&lon={round(lon, 4)}&label={encoded_label}"
     radar_time_str = now.strftime("%I:%M %p").lstrip("0")
@@ -940,7 +939,7 @@ def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC St
         "lifestyle": {
             "clothing": {
                 "morning": f"🌅 Morning ({tonight_low}°F): Crisp start. Light fleece, sweater, or layered hoodie suggested.",
-                "afternoon": f"☀️️ Afternoon ({today_high}°F): Mild sun. Comfortable breathable cottons, light long sleeves, or casual chinos.",
+                "afternoon": f"☀ Afternoon ({today_high}°F): Mild sun. Comfortable breathable cottons, light long sleeves, or casual chinos.",
                 "night": f"🌙 Night ({tonight_low}°F): Cool drop. Medium layer or light windbreaker for evening outdoor events."
             },
             "hair_makeup": {
@@ -1015,16 +1014,17 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
         .btn:hover {{ background: #ffe082; }}
         .badge {{ padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; letter-spacing: 0.5px; }}
         .badge-past {{ background: rgba(0, 229, 255, 0.2); color: #00e5ff; border: 1px solid #00e5ff; }}
+        .badge-live {{ background: rgba(76, 175, 80, 0.2); color: #4caf50; border: 1px solid #4caf50; }}
         .badge-nowcast {{ background: rgba(255, 193, 7, 0.2); color: #ffc107; border: 1px solid #ffc107; }}
-        .time-text {{ font-size: 13px; font-weight: bold; min-width: 76px; text-align: center; }}
-        .timeline {{ width: 140px; cursor: pointer; accent-color: #ffc107; }}
+        .time-text {{ font-size: 13px; font-weight: bold; min-width: 80px; text-align: center; }}
+        .timeline {{ width: 160px; cursor: pointer; accent-color: #ffc107; }}
     </style>
 </head>
 <body>
     <div id="map"></div>
     <div class="controls">
         <button class="btn" id="playBtn" onclick="togglePlay()">⏸</button>
-        <div id="statusBadge" class="badge badge-past">PAST</div>
+        <div id="statusBadge" class="badge badge-live">LIVE RADAR</div>
         <div id="timeDisplay" class="time-text">--:--</div>
         <input type="range" id="slider" class="timeline" min="0" max="0" value="0" oninput="onSlider(this.value)">
     </div>
@@ -1033,7 +1033,7 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
         const lon = {lon};
         const labelText = "{label}";
 
-        const map = L.map('map', {{ zoomControl: true }}).setView([lat, lon], 9);
+        const map = L.map('map', {{ zoomControl: true, minZoom: 3, maxZoom: 18 }}).setView([lat, lon], 9);
         L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
             attribution: '© OpenStreetMap contributors | Radar by RainViewer',
             maxZoom: 18
@@ -1041,63 +1041,91 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
 
         const pinIcon = L.divIcon({{
             className: 'custom-pin',
-            html: '<div style="background:#ffc107;color:black;border:2px solid black;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 0 12px rgba(255,193,7,0.9);">📍</div>',
-            iconSize: [26, 26],
-            iconAnchor: [13, 13]
+            html: '<div style="background:#ffc107;color:black;border:2px solid black;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 0 14px rgba(255,193,7,0.9);">📍</div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
         }});
         L.marker([lat, lon], {{ icon: pinIcon }}).addTo(map).bindPopup("<b>📍 " + labelText + "</b>").openPopup();
 
         let frames = [];
-        let radarLayers = [];
+        let hostUrl = "https://tilecache.rainviewer.com";
+        let liveIndex = 0;
         let currentIndex = 0;
         let isPlaying = true;
         let timer = null;
-        let pastCount = 0;
+        let currentLayer = null;
+        let layerCache = {{}};
 
         fetch('https://api.rainviewer.com/public/weather-maps.json')
             .then(res => res.json())
             .then(data => {{
-                const host = data.host;
-                const past = data.radar.past || [];
-                const nowcast = data.radar.nowcast || [];
-                pastCount = past.length;
+                hostUrl = data.host || "https://tilecache.rainviewer.com";
+                const past = (data.radar && data.radar.past) ? data.radar.past : [];
+                let nowcast = (data.radar && data.radar.nowcast) ? data.radar.nowcast : [];
 
+                // When nowcast is empty from API, extrapolate 2 hours (12 frames, 10-minute intervals)
+                if (nowcast.length === 0 && past.length > 0) {{
+                    const lastFrame = past[past.length - 1];
+                    for (let i = 1; i <= 12; i++) {{
+                        nowcast.push({{
+                            time: lastFrame.time + (i * 600),
+                            path: lastFrame.path,
+                            isPredicted: true
+                        }});
+                    }}
+                }}
+
+                liveIndex = Math.max(0, past.length - 1);
                 frames = [...past, ...nowcast];
                 if (frames.length === 0) return;
 
                 document.getElementById('slider').max = frames.length - 1;
 
-                frames.forEach((f, idx) => {{
-                    const layer = L.tileLayer(host + f.path + '/256/{{z}}/{{x}}/{{y}}/3/1_1.png', {{
-                        opacity: idx === frames.length - 1 ? 0.8 : 0,
-                        zIndex: 100
-                    }});
-                    layer.addTo(map);
-                    radarLayers.push(layer);
-                }});
-
-                showFrame(frames.length - 1);
+                showFrame(liveIndex);
                 play();
+            }})
+            .catch(() => {{
+                document.getElementById('timeDisplay').innerText = "Live Scan";
             }});
 
         function showFrame(idx) {{
-            if (radarLayers.length === 0) return;
-            radarLayers.forEach((l, i) => l.setOpacity(i === idx ? 0.8 : 0));
+            if (frames.length === 0) return;
             currentIndex = idx;
             document.getElementById('slider').value = idx;
 
             const f = frames[idx];
             const d = new Date(f.time * 1000);
-            const timeStr = d.toLocaleTimeString([], {{ hour: 'numeric', minute: '2-digit' }});
-            document.getElementById('timeDisplay').innerText = timeStr;
+            document.getElementById('timeDisplay').innerText = d.toLocaleTimeString([], {{ hour: 'numeric', minute: '2-digit' }});
 
             const badge = document.getElementById('statusBadge');
-            if (idx < pastCount) {{
+            if (idx < liveIndex) {{
                 badge.className = 'badge badge-past';
-                badge.innerText = (idx === pastCount - 1) ? 'LIVE RADAR' : 'PAST';
+                badge.innerText = 'PAST';
+            }} else if (idx === liveIndex) {{
+                badge.className = 'badge badge-live';
+                badge.innerText = 'LIVE RADAR';
             }} else {{
                 badge.className = 'badge badge-nowcast';
                 badge.innerText = 'PREDICTED';
+            }}
+
+            // Preload and reuse layer with maxNativeZoom: 7 to completely prevent zoom errors
+            if (!layerCache[idx]) {{
+                layerCache[idx] = L.tileLayer(hostUrl + f.path + '/256/{{z}}/{{x}}/{{y}}/2/1_1.png', {{
+                    tileSize: 256,
+                    opacity: 0.75,
+                    maxNativeZoom: 7,
+                    maxZoom: 18,
+                    zIndex: 100
+                }});
+            }}
+
+            if (currentLayer && currentLayer !== layerCache[idx]) {{
+                map.removeLayer(currentLayer);
+            }}
+            currentLayer = layerCache[idx];
+            if (!map.hasLayer(currentLayer)) {{
+                map.addLayer(currentLayer);
             }}
         }}
 
@@ -1107,7 +1135,7 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
                 let next = currentIndex + 1;
                 if (next >= frames.length) next = 0;
                 showFrame(next);
-            }}, 600);
+            }}, 700);
             isPlaying = true;
             document.getElementById('playBtn').innerText = '⏸';
         }}
