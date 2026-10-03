@@ -81,7 +81,9 @@ async def main(page: ft.Page):
     current_precip_text = ft.Text("Precip Now: 0% | Next 24h Max: 0%", size=14, color="cyan300", weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
     rain_duration_text = ft.Text("Zero precipitation expected.", size=13, color="amber100", text_align=ft.TextAlign.CENTER)
 
-    # Interactive Live Doppler Radar Section
+    # Interactive Live Doppler Radar Section with Clean Geography (lm=0)
+    radar_timestamp_text = ft.Text("🟢 Live Radar Scan • Synced", size=11, color="green300", weight=ft.FontWeight.W_600)
+
     radar_button_widget = ft.Container(
         content=ft.Row([
             ft.Icon(ft.Icons.RADAR, color="black", size=18),
@@ -91,7 +93,7 @@ async def main(page: ft.Page):
         border_radius=10,
         padding=ft.Padding(16, 10, 16, 10),
         ink=True,
-        url="https://www.rainviewer.com/map.html?loc=34.1378,-77.9150,8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=1&layer=radar&sm=1&sn=1",
+        url="https://www.rainviewer.com/map.html?loc=34.1378,-77.9150,8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=0&layer=radar&sm=1&sn=1",
     )
 
     radar_container = ft.Container(
@@ -101,7 +103,8 @@ async def main(page: ft.Page):
                 ft.Text("Live High-Resolution Doppler Radar", size=14, weight=ft.FontWeight.BOLD, color="amber300"),
             ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
             ft.Text("Real-time cloud, rain & convective storm tracking", size=11, color="grey400", text_align=ft.TextAlign.CENTER),
-            ft.Container(height=6),
+            radar_timestamp_text,
+            ft.Container(height=4),
             radar_button_widget,
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4),
         bgcolor="#18202c",
@@ -392,9 +395,11 @@ async def main(page: ft.Page):
             t_val = curr.get("temp", 74)
             feels_val = curr.get("feels_like", curr.get("heat_index", t_val))
 
-            # Update radar link to new coordinates
+            # Update radar link and live sync timestamp
             if "radar_url" in res:
                 radar_button_widget.url = res["radar_url"]
+            radar_time_val = res.get("radar_time", datetime.now().strftime("%I:%M %p").lstrip("0"))
+            radar_timestamp_text.value = f"🟢 Live Radar Scan • Synced at {radar_time_val}"
 
             is_night = curr.get("is_night", False)
             hero_weather_icon.name = ft.Icons.NIGHTLIGHT_ROUND if is_night else ft.Icons.WB_SUNNY

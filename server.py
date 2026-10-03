@@ -36,7 +36,7 @@ SPORTS_DB = {
     "broncos": ("Denver Broncos (NFL)", "Empower Field at Mile High (Denver, CO)", "Sunday 4:25 PM", "62°F, High plains breeze, Wind 8 mph"),
     "cowboys": ("Dallas Cowboys (NFL)", "AT&T Stadium (Arlington, TX)", "Sunday 1:00 PM", "72°F (Climate-controlled)"),
     "eagles": ("Philadelphia Eagles (NFL)", "Lincoln Financial Field (Philadelphia, PA)", "Sunday 1:00 PM", "65°F, Crisp autumn air, Wind 7 mph"),
-    "chiefs": ("Kansas Chief (NFL)", "Arrowhead Stadium (Kansas City, MO)", "Sunday 4:25 PM", "68°F, Clear sky, Wind 9 mph"),
+    "chiefs": ("Kansas City Chiefs (NFL)", "Arrowhead Stadium (Kansas City, MO)", "Sunday 4:25 PM", "68°F, Clear sky, Wind 9 mph"),
 }
 
 WMO_CODE_MAP = {
@@ -183,7 +183,6 @@ def fetch_comprehensive_weather(lat: float, lon: float, local_tz: ZoneInfo):
     daily_forecasts = []
     sun_times = {"sunrise": "06:45 AM", "sunset": "07:15 PM"}
     
-    # 1. Open-Meteo Current & Hourly (reliable source for Apparent Temp / Heat Index & live surface winds)
     apparent_temp_fallback = None
     try:
         om_url = (
@@ -209,7 +208,6 @@ def fetch_comprehensive_weather(lat: float, lon: float, local_tz: ZoneInfo):
             "feels_like": apparent_temp_fallback
         }
 
-        # Daily Forecasts
         daily_data = om_res.get("daily", {})
         dates = daily_data.get("time", [])
         highs = daily_data.get("temperature_2m_max", [])
@@ -255,7 +253,6 @@ def fetch_comprehensive_weather(lat: float, lon: float, local_tz: ZoneInfo):
                 "night_summary": f"Clear to partly cloudy cooling to near {l_val}°F."
             })
 
-        # Hourly data
         h_data = om_res.get("hourly", {})
         h_times = h_data.get("time", [])
         h_temps = h_data.get("temperature_2m", [])
@@ -282,7 +279,6 @@ def fetch_comprehensive_weather(lat: float, lon: float, local_tz: ZoneInfo):
     except Exception:
         pass
 
-    # 2. National Weather Service API (Overlays precise localized observation if available)
     try:
         pts = requests.get(f"https://api.weather.gov/points/{round(lat, 4)},{round(lon, 4)}", headers=headers, timeout=3).json()
         props = pts.get("properties", {})
@@ -496,7 +492,10 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
 
     tonight_low = daily_list[0]["low"]
     today_high = daily_list[0]["high"]
-    radar_url = f"https://www.rainviewer.com/map.html?loc={round(lat, 4)},{round(lon, 4)},8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=1&layer=radar&sm=1&sn=1"
+    
+    # lm=0 uses clean standard geographical terrain (eliminates false lake artifact around Fort Liberty / Fayetteville)
+    radar_url = f"https://www.rainviewer.com/map.html?loc={round(lat, 4)},{round(lon, 4)},8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=0&layer=radar&sm=1&sn=1"
+    radar_time_str = now.strftime("%I:%M %p").lstrip("0")
 
     # Outdoor Activities Scores
     beach_base = 100 - abs(avg_temp_6h - 82) * 2.0 - (avg_wind_6h * 1.5) - rain_penalty
@@ -571,6 +570,7 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
     return {
         "lat": lat, "lon": lon, "elevation_ft": elev_ft, "location_name": location_name,
         "radar_url": radar_url,
+        "radar_time": radar_time_str,
         "current": {
             "temp": curr_temp,
             "heat_index": curr_heat_index,
