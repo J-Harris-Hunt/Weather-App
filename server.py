@@ -997,64 +997,144 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
 <html>
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Thick Moose Radar • {label}</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        body, html {{ margin: 0; padding: 0; height: 100%; width: 100%; background: #16202c; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow: hidden; }}
-        #map {{ height: 100%; width: 100%; }}
+        * {{ box-sizing: border-box; }}
+        body, html {{ margin: 0; padding: 0; height: 100%; width: 100%; background: #0c1219; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; }}
+        #map {{ height: 100%; width: 100%; background: #0c1219; }}
+
+        /* Silky-smooth crossfade GPU transitions on radar tile container */
+        .leaflet-layer {{
+            transition: opacity 0.35s ease-in-out !important;
+            will-change: opacity;
+        }}
+
+        /* Broadcast Weather Top Header HUD */
+        .top-hud {{
+            position: absolute; top: 16px; left: 16px; right: 16px;
+            display: flex; justify-content: space-between; align-items: center;
+            z-index: 1000; pointer-events: none;
+        }}
+        .hud-card {{
+            background: rgba(18, 26, 36, 0.88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 193, 7, 0.4); border-radius: 12px;
+            padding: 8px 14px; color: white; display: flex; align-items: center; gap: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5); pointer-events: auto;
+        }}
+        .back-link {{
+            color: #ffc107; text-decoration: none; font-size: 13px; font-weight: bold;
+            display: flex; align-items: center; gap: 4px;
+        }}
+        .hud-title {{ font-size: 13px; font-weight: 700; color: #fff; }}
+
+        /* Reflectivity Intensity Legend Bar */
+        .legend-bar {{
+            display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; color: #aaa;
+        }}
+        .legend-gradient {{
+            width: 100px; height: 8px; border-radius: 4px;
+            background: linear-gradient(to right, #00e5ff, #00e676, #ffeb3b, #ff5722, #d500f9);
+        }}
+
+        /* Bottom Floating Player Controls */
         .controls {{
             position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
-            background: rgba(22, 32, 44, 0.94); border: 1.5px solid #ffc107; border-radius: 14px;
+            background: rgba(18, 26, 36, 0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            border: 1.5px solid rgba(255, 193, 7, 0.6); border-radius: 18px;
             padding: 10px 18px; display: flex; align-items: center; gap: 12px; z-index: 1000;
-            color: white; box-shadow: 0 4px 20px rgba(0,0,0,0.6); max-width: 90vw;
+            color: white; box-shadow: 0 8px 30px rgba(0,0,0,0.7); max-width: 94vw; width: 520px;
         }}
-        .btn {{ background: #ffc107; color: black; border: none; border-radius: 6px; padding: 7px 14px; font-weight: bold; cursor: pointer; font-size: 13px; }}
-        .btn:hover {{ background: #ffe082; }}
-        .badge {{ padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; letter-spacing: 0.5px; }}
+        .btn-ctrl {{
+            background: #ffc107; color: #000; border: none; border-radius: 8px;
+            width: 36px; height: 36px; font-size: 14px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            transition: all 0.15s ease;
+        }}
+        .btn-ctrl:hover {{ background: #ffe082; transform: scale(1.05); }}
+        .badge {{
+            padding: 5px 9px; border-radius: 8px; font-size: 11px; font-weight: 800; letter-spacing: 0.5px;
+            white-space: nowrap; text-align: center;
+        }}
         .badge-past {{ background: rgba(0, 229, 255, 0.2); color: #00e5ff; border: 1px solid #00e5ff; }}
-        .badge-live {{ background: rgba(76, 175, 80, 0.2); color: #4caf50; border: 1px solid #4caf50; }}
-        .badge-nowcast {{ background: rgba(255, 193, 7, 0.2); color: #ffc107; border: 1px solid #ffc107; }}
-        .time-text {{ font-size: 13px; font-weight: bold; min-width: 80px; text-align: center; }}
-        .timeline {{ width: 160px; cursor: pointer; accent-color: #ffc107; }}
+        .badge-live {{ background: rgba(76, 175, 80, 0.25); color: #4caf50; border: 1px solid #4caf50; }}
+        .badge-future {{ background: rgba(255, 193, 7, 0.25); color: #ffc107; border: 1px solid #ffc107; }}
+        .time-display {{ font-size: 13px; font-weight: 700; min-width: 82px; text-align: center; color: #fff; }}
+        .timeline {{
+            flex: 1; cursor: pointer; accent-color: #ffc107; height: 6px;
+        }}
+
+        /* Pulsing Location Pin */
+        @keyframes radar-pulse {{
+            0% {{ transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.8); }}
+            70% {{ transform: scale(1.1); box-shadow: 0 0 0 16px rgba(255, 193, 7, 0); }}
+            100% {{ transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }}
+        }}
+        .pulse-pin {{
+            background: #ffc107; color: black; border: 2.5px solid #000; border-radius: 50%;
+            width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+            font-size: 15px; animation: radar-pulse 2s infinite; cursor: pointer;
+        }}
     </style>
 </head>
 <body>
+    <div class="top-hud">
+        <div class="hud-card">
+            <a href="/" class="back-link">← Dashboard</a>
+            <span style="color:#555">|</span>
+            <span class="hud-title">📍 {label}</span>
+        </div>
+        <div class="hud-card">
+            <div class="legend-bar">
+                <span>Rain</span>
+                <div class="legend-gradient"></div>
+                <span style="color:#ff5722">Severe</span>
+            </div>
+        </div>
+    </div>
+
     <div id="map"></div>
+
     <div class="controls">
-        <button class="btn" id="playBtn" onclick="togglePlay()">⏸</button>
+        <button class="btn-ctrl" id="playBtn" onclick="togglePlay()">⏸</button>
         <div id="statusBadge" class="badge badge-live">LIVE RADAR</div>
-        <div id="timeDisplay" class="time-text">--:--</div>
+        <div id="timeDisplay" class="time-display">--:--</div>
         <input type="range" id="slider" class="timeline" min="0" max="0" value="0" oninput="onSlider(this.value)">
     </div>
+
     <script>
         const lat = {lat};
         const lon = {lon};
         const labelText = "{label}";
 
-        const map = L.map('map', {{ zoomControl: true, minZoom: 3, maxZoom: 18 }}).setView([lat, lon], 9);
-        L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
-            attribution: '© OpenStreetMap contributors | Radar by RainViewer',
-            maxZoom: 18
+        // Initialize high-contrast dark basemap to make precipitation colors pop cleanly
+        const map = L.map('map', {{ zoomControl: false, minZoom: 4, maxZoom: 18 }}).setView([lat, lon], 8);
+        L.control.zoom({{ position: 'topright' }}).addTo(map);
+
+        L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
+            attribution: '&copy; OpenStreetMap &copy; CARTO | Doppler: RainViewer',
+            subdomains: 'abcd',
+            maxZoom: 19
         }}).addTo(map);
 
+        // Pinned location marker with pulsing target reticle
         const pinIcon = L.divIcon({{
-            className: 'custom-pin',
-            html: '<div style="background:#ffc107;color:black;border:2px solid black;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 0 14px rgba(255,193,7,0.9);">📍</div>',
-            iconSize: [28, 28],
-            iconAnchor: [14, 14]
+            className: 'custom-pin-container',
+            html: '<div class="pulse-pin">📍</div>',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
         }});
         L.marker([lat, lon], {{ icon: pinIcon }}).addTo(map).bindPopup("<b>📍 " + labelText + "</b>").openPopup();
 
         let frames = [];
+        let radarLayers = [];
         let hostUrl = "https://tilecache.rainviewer.com";
         let liveIndex = 0;
         let currentIndex = 0;
         let isPlaying = true;
         let timer = null;
-        let currentLayer = null;
-        let layerCache = {{}};
 
         fetch('https://api.rainviewer.com/public/weather-maps.json')
             .then(res => res.json())
@@ -1063,13 +1143,17 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
                 const past = (data.radar && data.radar.past) ? data.radar.past : [];
                 let nowcast = (data.radar && data.radar.nowcast) ? data.radar.nowcast : [];
 
-                // When nowcast is empty from API, extrapolate 2 hours (12 frames, 10-minute intervals)
-                if (nowcast.length === 0 && past.length > 0) {{
+                // Seamlessly project forward 2 hours (12 frames, 10-minute steps)
+                if (past.length > 0) {{
                     const lastFrame = past[past.length - 1];
-                    for (let i = 1; i <= 12; i++) {{
+                    const existingNowcast = nowcast.length;
+                    const needed = Math.max(0, 12 - existingNowcast);
+                    for (let i = 1; i <= needed; i++) {{
+                        const futureTime = (existingNowcast > 0 ? nowcast[nowcast.length - 1].time : lastFrame.time) + (i * 600);
+                        const sourcePath = existingNowcast > 0 ? nowcast[nowcast.length - 1].path : lastFrame.path;
                         nowcast.push({{
-                            time: lastFrame.time + (i * 600),
-                            path: lastFrame.path,
+                            time: futureTime,
+                            path: sourcePath,
                             isPredicted: true
                         }});
                     }}
@@ -1081,16 +1165,36 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
 
                 document.getElementById('slider').max = frames.length - 1;
 
+                // Pre-build all layers with maxNativeZoom: 7 to completely banish zoom errors
+                frames.forEach((f, idx) => {{
+                    const layer = L.tileLayer(hostUrl + f.path + '/256/{{z}}/{{x}}/{{y}}/2/1_1.png', {{
+                        tileSize: 256,
+                        opacity: 0,
+                        maxNativeZoom: 7,
+                        maxZoom: 19,
+                        zIndex: 100
+                    }});
+                    layer.addTo(map);
+                    radarLayers.push(layer);
+                }});
+
                 showFrame(liveIndex);
                 play();
             }})
             .catch(() => {{
-                document.getElementById('timeDisplay').innerText = "Live Scan";
+                document.getElementById('timeDisplay').innerText = "Live Radar";
             }});
 
         function showFrame(idx) {{
-            if (frames.length === 0) return;
+            if (radarLayers.length === 0) return;
+            const oldIdx = currentIndex;
             currentIndex = idx;
+
+            // Crossfade opacities smoothly via CSS transitions
+            radarLayers.forEach((l, i) => {{
+                l.setOpacity(i === idx ? 0.82 : 0);
+            }});
+
             document.getElementById('slider').value = idx;
 
             const f = frames[idx];
@@ -1105,27 +1209,8 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
                 badge.className = 'badge badge-live';
                 badge.innerText = 'LIVE RADAR';
             }} else {{
-                badge.className = 'badge badge-nowcast';
+                badge.className = 'badge badge-future';
                 badge.innerText = 'PREDICTED';
-            }}
-
-            // Preload and reuse layer with maxNativeZoom: 7 to completely prevent zoom errors
-            if (!layerCache[idx]) {{
-                layerCache[idx] = L.tileLayer(hostUrl + f.path + '/256/{{z}}/{{x}}/{{y}}/2/1_1.png', {{
-                    tileSize: 256,
-                    opacity: 0.75,
-                    maxNativeZoom: 7,
-                    maxZoom: 18,
-                    zIndex: 100
-                }});
-            }}
-
-            if (currentLayer && currentLayer !== layerCache[idx]) {{
-                map.removeLayer(currentLayer);
-            }}
-            currentLayer = layerCache[idx];
-            if (!map.hasLayer(currentLayer)) {{
-                map.addLayer(currentLayer);
             }}
         }}
 
@@ -1135,7 +1220,7 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
                 let next = currentIndex + 1;
                 if (next >= frames.length) next = 0;
                 showFrame(next);
-            }}, 700);
+            }}, 550);
             isPlaying = true;
             document.getElementById('playBtn').innerText = '⏸';
         }}
