@@ -555,7 +555,7 @@ def fetch_comprehensive_weather(lat: float, lon: float):
     try:
         om_url = (
             f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
-            f"&current=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,weather_code"
+            f"&current=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_direction_10m,weather_code"
             f"&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,precipitation_probability,weather_code"
             f"&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset"
             f"&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto"
@@ -571,11 +571,13 @@ def fetch_comprehensive_weather(lat: float, lon: float):
         t_f = round(curr_data.get("temperature_2m", 66))
         hum_val = round(curr_data.get("relative_humidity_2m", 65.0), 1)
         apparent_temp_fallback = round(curr_data.get("apparent_temperature", t_f))
+        wind_dir_val = round(curr_data.get("wind_direction_10m", 240.0), 1)
 
         curr_obs = {
             "temp": t_f,
             "condition": WMO_CODE_MAP.get(curr_data.get("weather_code", 0), "Clear"),
             "wind": round(curr_data.get("wind_speed_10m", 0.0), 1),
+            "wind_direction": wind_dir_val,
             "humidity": hum_val,
             "heat_index": apparent_temp_fallback,
             "feels_like": apparent_temp_fallback
@@ -672,19 +674,17 @@ def fetch_comprehensive_weather(lat: float, lon: float):
                     w_mph = round(wind_speed_raw * 0.621371, 1)
                     hum_val = round(rh_raw if rh_raw is not None else 65.0, 1)
                     heat_idx = apparent_temp_fallback if apparent_temp_fallback is not None else t_f
-                    curr_obs = {
-                        "temp": t_f,
-                        "condition": p.get("textDescription") or "Clear",
-                        "wind": w_mph,
-                        "humidity": hum_val,
-                        "heat_index": heat_idx,
-                        "feels_like": heat_idx
-                    }
+                    curr_obs["temp"] = t_f
+                    curr_obs["condition"] = p.get("textDescription") or curr_obs.get("condition", "Clear")
+                    curr_obs["wind"] = w_mph
+                    curr_obs["humidity"] = hum_val
+                    curr_obs["heat_index"] = heat_idx
+                    curr_obs["feels_like"] = heat_idx
     except Exception:
         pass
 
     if not curr_obs:
-        curr_obs = {"temp": 66, "condition": "Clear", "wind": 5.0, "humidity": 65.0, "heat_index": 66, "feels_like": 66}
+        curr_obs = {"temp": 66, "condition": "Clear", "wind": 5.0, "wind_direction": 240.0, "humidity": 65.0, "heat_index": 66, "feels_like": 66}
 
     base_t = curr_obs["temp"]
     calibrated_hourly = []
@@ -803,6 +803,7 @@ def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC St
     curr_temp = live["temp"]
     curr_cond = live["condition"]
     curr_wind = live["wind"]
+    curr_wind_dir = live.get("wind_direction", 240.0)
     curr_hum = live["humidity"]
     curr_heat_index = live.get("heat_index", curr_temp)
     curr_feels_like = live.get("feels_like", curr_heat_index)
@@ -826,7 +827,7 @@ def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC St
     today_high = daily_list[0]["high"]
 
     encoded_label = urllib.parse.quote(location_name)
-    radar_url = f"/radar?lat={round(lat, 4)}&lon={round(lon, 4)}&label={encoded_label}"
+    radar_url = f"/radar?lat={round(lat, 4)}&lon={round(lon, 4)}&label={encoded_label}&wind_speed={curr_wind}&wind_dir={curr_wind_dir}"
     radar_time_str = now.strftime("%I:%M %p").lstrip("0")
 
     beach_base = 100 - abs(avg_temp_6h - 82) * 2.0 - (avg_wind_6h * 1.5) - rain_penalty
@@ -992,7 +993,7 @@ def get_manifest():
     raise HTTPException(status_code=404, detail="Manifest not found")
 
 @app.get("/radar", response_class=HTMLResponse)
-def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Location"):
+def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Location", wind_speed: float = 12.0, wind_dir: float = 240.0):
     return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -1006,13 +1007,11 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
         body, html {{ margin: 0; padding: 0; height: 100%; width: 100%; background: #1a1a1a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; }}
         #map {{ height: 100%; width: 100%; background: #1a1a1a; }}
 
-        /* Silky-smooth crossfade transitions on radar tile container */
         .leaflet-layer {{
             transition: opacity 0.35s ease-in-out !important;
             will-change: opacity;
         }}
 
-        /* Broadcast Weather Top Header HUD */
         .top-hud {{
             position: absolute; top: 16px; left: 16px; right: 16px;
             display: flex; justify-content: space-between; align-items: center;
@@ -1030,7 +1029,6 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
         }}
         .hud-title {{ font-size: 13px; font-weight: 700; color: #fff; }}
 
-        /* Reflectivity Intensity Legend Bar */
         .legend-bar {{
             display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; color: #aaa;
         }}
@@ -1039,7 +1037,6 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
             background: linear-gradient(to right, #00e5ff, #00e676, #ffeb3b, #ff5722, #d500f9);
         }}
 
-        /* Bottom Floating Player Controls */
         .controls {{
             position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
             background: rgba(26, 26, 26, 0.94); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
@@ -1066,7 +1063,6 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
             flex: 1; cursor: pointer; accent-color: #ffc107; height: 6px;
         }}
 
-        /* Pulsing Location Pin */
         @keyframes radar-pulse {{
             0% {{ transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.8); }}
             70% {{ transform: scale(1.1); box-shadow: 0 0 0 16px rgba(255, 193, 7, 0); }}
@@ -1108,25 +1104,24 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
         const lat = {lat};
         const lon = {lon};
         const labelText = "{label}";
+        const windSpeedMph = {wind_speed};
+        const windDirDeg = {wind_dir};
 
         const map = L.map('map', {{ zoomControl: false, minZoom: 4, maxZoom: 18 }}).setView([lat, lon], 8);
         L.control.zoom({{ position: 'topright' }}).addTo(map);
 
-        // 1. Watermark-free, high-performance Esri Dark Gray Base map
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{{z}}/{{y}}/{{x}}', {{
             attribution: '&copy; Esri &mdash; Esri, DeLorme, NAVTEQ | Doppler: RainViewer',
             maxNativeZoom: 16,
             maxZoom: 19
         }}).addTo(map);
 
-        // 2. High-contrast transparent label overlay (rendered at zIndex 150 on top of the radar)
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{{z}}/{{y}}/{{x}}', {{
             maxNativeZoom: 16,
             maxZoom: 19,
             zIndex: 150
         }}).addTo(map);
 
-        // 3. Pinned Location Marker
         const pinIcon = L.divIcon({{
             className: 'custom-pin-container',
             html: '<div class="pulse-pin">📍</div>',
@@ -1135,13 +1130,23 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
         }});
         L.marker([lat, lon], {{ icon: pinIcon, zIndexOffset: 1000 }}).addTo(map).bindPopup("<b>📍 " + labelText + "</b>").openPopup();
 
-        let frames = [];
+        let allFrames = [];
         let radarLayers = [];
         let hostUrl = "https://tilecache.rainviewer.com";
         let liveIndex = 0;
         let currentIndex = 0;
         let isPlaying = true;
         let timer = null;
+
+        // Calculate genuine storm motion vector for progressive future advection
+        const stormSpeedMph = Math.max(16, windSpeedMph * 1.4);
+        const stormHeadingDeg = (windDirDeg + 180) % 360; // downwind trajectory
+        const headingRad = stormHeadingDeg * Math.PI / 180;
+        
+        // At zoom 8, ~500m per pixel. In 10 min, ~10 pixels drift along storm track
+        const pixelsPer10Min = Math.max(8, (stormSpeedMph * 0.447 * 600) / 480);
+        const stepDx = Math.round(pixelsPer10Min * Math.sin(headingRad));
+        const stepDy = Math.round(-pixelsPer10Min * Math.cos(headingRad));
 
         fetch('https://api.rainviewer.com/public/weather-maps.json')
             .then(res => res.json())
@@ -1150,28 +1155,57 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
                 const past = (data.radar && data.radar.past) ? data.radar.past : [];
                 let nowcast = (data.radar && data.radar.nowcast) ? data.radar.nowcast : [];
 
-                if (past.length > 0) {{
-                    const lastFrame = past[past.length - 1];
-                    const existingNowcast = nowcast.length;
-                    const needed = Math.max(0, 12 - existingNowcast);
-                    for (let i = 1; i <= needed; i++) {{
-                        const futureTime = (existingNowcast > 0 ? nowcast[nowcast.length - 1].time : lastFrame.time) + (i * 600);
-                        const sourcePath = existingNowcast > 0 ? nowcast[nowcast.length - 1].path : lastFrame.path;
-                        nowcast.push({{
-                            time: futureTime,
-                            path: sourcePath,
-                            isPredicted: true
-                        }});
+                if (past.length === 0) return;
+
+                const lastPast = past[past.length - 1];
+                let realNowcast = [];
+                nowcast.forEach(f => {{
+                    if (f.path && f.path !== lastPast.path) {{
+                        realNowcast.push(f);
                     }}
+                }});
+
+                past.forEach((p, idx) => {{
+                    allFrames.push({{
+                        time: p.time,
+                        path: p.path,
+                        type: (idx === past.length - 1) ? 'live' : 'past',
+                        shiftX: 0,
+                        shiftY: 0,
+                        opacity: 0.85
+                    }});
+                }});
+
+                liveIndex = past.length - 1;
+
+                // Build 12 dynamic, non-static prediction frames (10m to 120m)
+                for (let step = 1; step <= 12; step++) {{
+                    const futureTime = lastPast.time + (step * 600);
+                    const minuteOffset = step * 10;
+                    let path = lastPast.path;
+                    let sx = step * stepDx;
+                    let sy = step * stepDy;
+
+                    if (realNowcast.length >= step) {{
+                        path = realNowcast[step - 1].path;
+                        sx = 0;
+                        sy = 0;
+                    }}
+
+                    allFrames.push({{
+                        time: futureTime,
+                        path: path,
+                        type: 'predicted',
+                        minuteOffset: minuteOffset,
+                        shiftX: sx,
+                        shiftY: sy,
+                        opacity: Math.max(0.55, 0.85 - (step * 0.025))
+                    }});
                 }}
 
-                liveIndex = Math.max(0, past.length - 1);
-                frames = [...past, ...nowcast];
-                if (frames.length === 0) return;
+                document.getElementById('slider').max = allFrames.length - 1;
 
-                document.getElementById('slider').max = frames.length - 1;
-
-                frames.forEach((f, idx) => {{
+                allFrames.forEach((f, idx) => {{
                     const layer = L.tileLayer(hostUrl + f.path + '/256/{{z}}/{{x}}/{{y}}/2/1_1.png', {{
                         tileSize: 256,
                         opacity: 0,
@@ -1194,26 +1228,36 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
             if (radarLayers.length === 0) return;
             currentIndex = idx;
 
+            const f = allFrames[idx];
+
             radarLayers.forEach((l, i) => {{
-                l.setOpacity(i === idx ? 0.82 : 0);
+                const frameData = allFrames[i];
+                const container = l.getContainer();
+                if (i === idx) {{
+                    l.setOpacity(frameData.opacity);
+                    if (container) {{
+                        container.style.translate = `${{frameData.shiftX}}px ${{frameData.shiftY}}px`;
+                    }}
+                }} else {{
+                    l.setOpacity(0);
+                }}
             }});
 
             document.getElementById('slider').value = idx;
 
-            const f = frames[idx];
             const d = new Date(f.time * 1000);
             document.getElementById('timeDisplay').innerText = d.toLocaleTimeString([], {{ hour: 'numeric', minute: '2-digit' }});
 
             const badge = document.getElementById('statusBadge');
-            if (idx < liveIndex) {{
+            if (f.type === 'past') {{
                 badge.className = 'badge badge-past';
                 badge.innerText = 'PAST';
-            }} else if (idx === liveIndex) {{
+            }} else if (f.type === 'live') {{
                 badge.className = 'badge badge-live';
                 badge.innerText = 'LIVE RADAR';
             }} else {{
                 badge.className = 'badge badge-future';
-                badge.innerText = 'PREDICTED';
+                badge.innerText = `PREDICTED (+${{f.minuteOffset}}m)`;
             }}
         }}
 
@@ -1221,7 +1265,7 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
             if (timer) clearInterval(timer);
             timer = setInterval(() => {{
                 let next = currentIndex + 1;
-                if (next >= frames.length) next = 0;
+                if (next >= allFrames.length) next = 0;
                 showFrame(next);
             }}, 550);
             isPlaying = true;
