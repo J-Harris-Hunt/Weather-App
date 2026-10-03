@@ -44,6 +44,21 @@ TEAM_STADIUM_MAP = {
     "red sox": {"name": "Boston Red Sox (MLB)", "venue": "Fenway Park (Boston, MA)", "lat": 42.3467, "lon": -71.0972, "indoor": False},
 }
 
+US_STATES = {
+    "al": "Alabama", "ak": "Alaska", "az": "Arizona", "ar": "Arkansas", "ca": "California",
+    "co": "Colorado", "ct": "Connecticut", "de": "Delaware", "fl": "Florida", "ga": "Georgia",
+    "hi": "Hawaii", "id": "Idaho", "il": "Illinois", "in": "Indiana", "ia": "Iowa",
+    "ks": "Kansas", "ky": "Kentucky", "la": "Louisiana", "me": "Maine", "md": "Maryland",
+    "ma": "Massachusetts", "mi": "Michigan", "mn": "Minnesota", "ms": "Mississippi", "mo": "Missouri",
+    "mt": "Montana", "ne": "Nebraska", "nv": "Nevada", "nh": "New Hampshire", "nj": "New Jersey",
+    "nm": "New Mexico", "ny": "New York", "nc": "North Carolina", "nd": "North Dakota", "oh": "Ohio",
+    "ok": "Oklahoma", "or": "Oregon", "pa": "Pennsylvania", "ri": "Rhode Island", "sc": "South Carolina",
+    "sd": "South Dakota", "tn": "Tennessee", "tx": "Texas", "ut": "Utah", "vt": "Vermont",
+    "va": "Virginia", "wa": "Washington", "wv": "West Virginia", "wi": "Wisconsin", "wy": "Wyoming",
+    "dc": "District of Columbia", "pr": "Puerto Rico"
+}
+US_STATES_REVERSE = {v.lower(): k.upper() for k, v in US_STATES.items()}
+
 GENERIC_STOPWORDS = {
     "state", "university", "tech", "college", "city", "north", "south",
     "east", "west", "central", "eastern", "western", "southern", "northern",
@@ -61,25 +76,71 @@ WMO_CODE_MAP = {
     95: "Thunderstorm", 96: "Thunderstorm w/ Hail", 99: "Heavy Hail Storm"
 }
 
-def auto_detect_location():
+def auto_detect_location(client_ip: str = None):
+    ip_target = ""
+    if client_ip and client_ip not in ["127.0.0.1", "::1", "localhost", "None", ""]:
+        ip_target = client_ip.strip()
+
+    headers = {"User-Agent": "ThickMooseWeather/2.0 (contact@thickmooselabs.com)"}
+
+    # 1. Primary: ip-api.com
     try:
-        r = requests.get("https://ipapi.co/json/", timeout=3).json()
-        city = r.get("city")
-        region = r.get("region_code") or r.get("region")
-        postal = r.get("postal")
-        lat = float(r.get("latitude"))
-        lon = float(r.get("longitude"))
-        label = f"{city}, {region} ({postal})" if postal else f"{city}, {region}"
-        return postal or city or f"{lat},{lon}", lat, lon, label
+        url = f"http://ip-api.com/json/{ip_target}" if ip_target else "http://ip-api.com/json/"
+        r = requests.get(url, timeout=3.5).json()
+        if r.get("status") == "success":
+            city = r.get("city", "")
+            region = r.get("region", "")
+            postal = r.get("zip", "")
+            lat = float(r.get("lat", 0.0))
+            lon = float(r.get("lon", 0.0))
+            loc_label = f"{city}, {region} ({postal})" if postal else f"{city}, {region}"
+            search_query = postal or f"{city}, {region}" or f"{lat:.4f},{lon:.4f}"
+            return search_query, lat, lon, loc_label
     except Exception:
-        return "", 38.8951, -77.0364, "Washington, DC (GPS Default)"
+        pass
+
+    # 2. Secondary: freeipapi.com
+    try:
+        url = f"https://freeipapi.com/api/json/{ip_target}" if ip_target else "https://freeipapi.com/api/json"
+        r = requests.get(url, headers=headers, timeout=3.5).json()
+        city = r.get("cityName", "")
+        region = r.get("regionName", "")
+        postal = r.get("zipCode", "")
+        lat = float(r.get("latitude", 0.0))
+        lon = float(r.get("longitude", 0.0))
+        if city or (lat and lon):
+            loc_label = f"{city}, {region} ({postal})" if postal else f"{city}, {region}"
+            search_query = postal or f"{city}, {region}" or f"{lat:.4f},{lon:.4f}"
+            return search_query, lat, lon, loc_label
+    except Exception:
+        pass
+
+    # 3. Tertiary: ipapi.co
+    try:
+        url = f"https://ipapi.co/{ip_target}/json/" if ip_target else "https://ipapi.co/json/"
+        r = requests.get(url, headers=headers, timeout=3.5).json()
+        city = r.get("city", "")
+        region = r.get("region_code", "")
+        postal = r.get("postal", "")
+        lat_val = r.get("latitude")
+        lon_val = r.get("longitude")
+        if lat_val and lon_val:
+            lat = float(lat_val)
+            lon = float(lon_val)
+            loc_label = f"{city}, {region} ({postal})" if postal else f"{city}, {region}"
+            search_query = postal or f"{city}, {region}" or f"{lat:.4f},{lon:.4f}"
+            return search_query, lat, lon, loc_label
+    except Exception:
+        pass
+
+    return "28412", 34.1378, -77.9150, "Wilmington, NC (28412)"
 
 def get_coordinates(query: str):
     clean_q = str(query).strip()
     if not clean_q:
         return None, None, None, None
 
-    # 1. Direct Lat/Lon coordinate lookup
+    # 1. Direct Lat/Lon numerical coordinates
     if "," in clean_q:
         parts = [p.strip() for p in clean_q.split(",")]
         try:
@@ -88,19 +149,7 @@ def get_coordinates(query: str):
             loc_label = f"Location ({round(lat_f, 3)}, {round(lon_f, 3)})"
             elev_ft = 50
             try:
-                rev = requests.get(
-                    f"https://nominatim.openstreetmap.org/reverse?lat={lat_f}&lon={lon_f}&format=json",
-                    headers={"User-Agent": "ThickMooseWeather/2.0 (contact@thickmooselabs.com)"},
-                    timeout=3
-                ).json()
-                addr = rev.get("address", {})
-                city = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("suburb") or addr.get("county") or "Local Area"
-                state = addr.get("state", "")
-                loc_label = f"{city}, {state} (GPS)" if state else city
-            except Exception:
-                pass
-            try:
-                el_r = requests.get(f"https://api.open-meteo.com/v1/elevation?latitude={lat_f}&longitude={lon_f}", timeout=3).json()
+                el_r = requests.get(f"https://api.open-meteo.com/v1/elevation?latitude={lat_f}&longitude={lon_f}", timeout=2.5).json()
                 elev_ft = round(el_r.get("elevation", [15])[0] * 3.28084)
             except Exception:
                 pass
@@ -108,91 +157,156 @@ def get_coordinates(query: str):
         except ValueError:
             pass
 
-    # 2. OpenStreetMap Nominatim for street address, city, and postal code resolution across North America
-    try:
-        encoded_q = urllib.parse.quote(clean_q)
-        nom_url = f"https://nominatim.openstreetmap.org/search?q={encoded_q}&format=json&addressdetails=1&limit=1"
-        headers = {"User-Agent": "ThickMooseWeather/2.0 (contact@thickmooselabs.com)"}
-        r = requests.get(nom_url, headers=headers, timeout=3.5).json()
-        if r and len(r) > 0:
-            item = r[0]
-            lat_f = float(item["lat"])
-            lon_f = float(item["lon"])
-            addr = item.get("address", {})
+    # 2. Pure 5-digit ZIP or Canadian postal code
+    if clean_q.isdigit() and len(clean_q) == 5:
+        try:
+            zr = requests.get(f"https://api.zippopotam.us/us/{clean_q}", timeout=3).json()
+            places = zr.get("places", [])
+            if places:
+                p = places[0]
+                lat_f = float(p.get("latitude"))
+                lon_f = float(p.get("longitude"))
+                city = p.get("place name", clean_q)
+                st = p.get("state abbreviation", "")
+                elev_ft = 50
+                try:
+                    el_r = requests.get(f"https://api.open-meteo.com/v1/elevation?latitude={lat_f}&longitude={lon_f}", timeout=2.5).json()
+                    elev_ft = round(el_r.get("elevation", [15])[0] * 3.28084)
+                except Exception:
+                    pass
+                return lat_f, lon_f, elev_ft, f"{city}, {st} ({clean_q})"
+        except Exception:
+            pass
 
-            road = addr.get("road") or addr.get("pedestrian") or ""
-            house_number = addr.get("house_number", "")
-            neighbourhood = addr.get("neighbourhood") or addr.get("suburb") or ""
-            city = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("hamlet") or addr.get("county") or "Local Area"
-            state = addr.get("state") or addr.get("province") or ""
-            postcode = addr.get("postcode", "")
-            country = addr.get("country", "")
+    # 3. Analyze tokens for flexible re-ordering (e.g. "NC, Wilmington, 28412" or "Wilmington, NC 28412")
+    zip_match = re.search(r'\b\d{5}\b', clean_q)
+    extracted_zip = zip_match.group(0) if zip_match else ""
 
-            label_parts = []
-            if house_number and road:
-                label_parts.append(f"{house_number} {road}")
-            elif road:
-                label_parts.append(road)
-            elif neighbourhood:
-                label_parts.append(neighbourhood)
+    parts = [p.strip() for p in clean_q.split(",") if p.strip()]
+    detected_state_abbr = ""
+    detected_city = ""
 
-            if city:
-                label_parts.append(city)
-            if state:
-                label_parts.append(state)
-            if postcode and postcode not in label_parts:
-                label_parts.append(f"({postcode})")
-            elif country and country not in ["United States", "United States of America"]:
-                label_parts.append(country)
+    for idx, part in enumerate(parts):
+        p_lower = part.lower().strip()
+        if p_lower in US_STATES:
+            detected_state_abbr = p_lower.upper()
+        elif p_lower in US_STATES_REVERSE:
+            detected_state_abbr = US_STATES_REVERSE[p_lower]
+        elif not detected_city and not part.isdigit():
+            detected_city = part
 
-            loc_label = ", ".join([p for p in label_parts if p]) if label_parts else item.get("display_name", clean_q)
+    # Reconstruct canonical query if mixed order detected
+    candidate_queries = [clean_q]
+    if detected_city and detected_state_abbr:
+        if extracted_zip:
+            candidate_queries.insert(0, f"{detected_city}, {detected_state_abbr} {extracted_zip}")
+        candidate_queries.append(f"{detected_city}, {detected_state_abbr}")
 
-            elev_ft = 50
-            try:
-                el_r = requests.get(f"https://api.open-meteo.com/v1/elevation?latitude={lat_f}&longitude={lon_f}", timeout=3).json()
-                elev_ft = round(el_r.get("elevation", [15])[0] * 3.28084)
-            except Exception:
-                pass
-            return lat_f, lon_f, elev_ft, loc_label
-    except Exception:
-        pass
+    # 4. Query Nominatim across candidate variations
+    headers = {"User-Agent": "ThickMooseWeather/2.0 (contact@thickmooselabs.com)"}
+    for q_try in candidate_queries:
+        try:
+            nom_url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(q_try)}&format=json&addressdetails=1&limit=1"
+            r = requests.get(nom_url, headers=headers, timeout=3.5).json()
+            if r and len(r) > 0:
+                item = r[0]
+                lat_f = float(item["lat"])
+                lon_f = float(item["lon"])
+                addr = item.get("address", {})
 
-    # 3. Global Geocoding fallback
-    try:
-        r = requests.get(
-            f"https://geocoding-api.open-meteo.com/v1/search?name={urllib.parse.quote(clean_q)}&count=1&language=en&format=json",
-            timeout=4
-        ).json()
-        res = r.get("results", [])
-        if res:
-            t = res[0]
-            lat = float(t["latitude"])
-            lon = float(t["longitude"])
-            elev_m = t.get("elevation", 15) or 15
-            elev_ft = round(elev_m * 3.28084)
-            name = t.get("name", clean_q)
-            admin1 = t.get("admin1", "")
-            country_code = t.get("country_code", "")
-            label_parts = [name]
-            if admin1:
-                label_parts.append(admin1)
-            if country_code and country_code.upper() not in ["US"]:
-                label_parts.append(country_code.upper())
-            label = ", ".join(label_parts)
-            return lat, lon, elev_ft, label
-    except Exception:
-        pass
+                road = addr.get("road") or addr.get("pedestrian") or ""
+                house_number = addr.get("house_number", "")
+                neighbourhood = addr.get("neighbourhood") or addr.get("suburb") or ""
+                city = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("hamlet") or addr.get("county") or detected_city or "Local Area"
+                state = addr.get("state") or addr.get("province") or detected_state_abbr
+                postcode = addr.get("postcode", extracted_zip)
+                country = addr.get("country", "")
+
+                label_parts = []
+                if house_number and road:
+                    label_parts.append(f"{house_number} {road}")
+                elif road:
+                    label_parts.append(road)
+                elif neighbourhood:
+                    label_parts.append(neighbourhood)
+
+                if city:
+                    label_parts.append(city)
+                if state:
+                    label_parts.append(state)
+                if postcode and postcode not in label_parts:
+                    label_parts.append(f"({postcode})")
+                elif country and country not in ["United States", "United States of America"]:
+                    label_parts.append(country)
+
+                loc_label = ", ".join([p for p in label_parts if p]) if label_parts else item.get("display_name", clean_q)
+                elev_ft = 50
+                try:
+                    el_r = requests.get(f"https://api.open-meteo.com/v1/elevation?latitude={lat_f}&longitude={lon_f}", timeout=2.5).json()
+                    elev_ft = round(el_r.get("elevation", [15])[0] * 3.28084)
+                except Exception:
+                    pass
+                return lat_f, lon_f, elev_ft, loc_label
+        except Exception:
+            pass
+
+    # 5. Fallback via extracted 5-digit ZIP
+    if extracted_zip:
+        try:
+            zr = requests.get(f"https://api.zippopotam.us/us/{extracted_zip}", timeout=3).json()
+            places = zr.get("places", [])
+            if places:
+                p = places[0]
+                lat_f = float(p.get("latitude"))
+                lon_f = float(p.get("longitude"))
+                city = p.get("place name", detected_city or extracted_zip)
+                st = p.get("state abbreviation", detected_state_abbr)
+                elev_ft = 50
+                try:
+                    el_r = requests.get(f"https://api.open-meteo.com/v1/elevation?latitude={lat_f}&longitude={lon_f}", timeout=2.5).json()
+                    elev_ft = round(el_r.get("elevation", [15])[0] * 3.28084)
+                except Exception:
+                    pass
+                return lat_f, lon_f, elev_ft, f"{city}, {st} ({extracted_zip})"
+        except Exception:
+            pass
+
+    # 6. Fallback via Open-Meteo city name
+    city_candidate = detected_city or re.sub(r'[\d,]', '', clean_q).strip()
+    if city_candidate:
+        try:
+            r = requests.get(
+                f"https://geocoding-api.open-meteo.com/v1/search?name={urllib.parse.quote(city_candidate)}&count=5&language=en&format=json",
+                timeout=3.5
+            ).json()
+            res_list = r.get("results", [])
+            if res_list:
+                matched_target = res_list[0]
+                if detected_state_abbr:
+                    for item in res_list:
+                        admin = (item.get("admin1") or "").lower()
+                        if detected_state_abbr.lower() in admin or (US_STATES.get(detected_state_abbr.lower(), "").lower() in admin):
+                            matched_target = item
+                            break
+
+                lat_f = float(matched_target["latitude"])
+                lon_f = float(matched_target["longitude"])
+                name = matched_target.get("name", city_candidate)
+                admin1 = matched_target.get("admin1", "")
+                elev_m = matched_target.get("elevation", 15) or 15
+                elev_ft = round(elev_m * 3.28084)
+                label = f"{name}, {admin1}" if admin1 else name
+                return lat_f, lon_f, elev_ft, label
+        except Exception:
+            pass
 
     return None, None, None, None
 
 def is_coastal_region(lat: float, lon: float) -> bool:
-    # Atlantic Coast
     if lon > -82.0 and lat > 24.0 and (lon > -78.0 or (lat > 37.0 and lon > -76.0)):
         return True
-    # Gulf Coast
     if 24.5 <= lat <= 30.8 and -98.0 <= lon <= -81.0:
         return True
-    # Pacific Coast (US / Canada / Baja)
     if lon < -117.0 and 22.0 <= lat <= 58.0:
         return True
     return False
@@ -217,7 +331,6 @@ def fetch_live_aqi(lat: float, lon: float):
         return {"aqi": 35, "value": 35, "category": "Good", "status": "35 (Good)"}
 
 def fetch_noaa_tides(lat: float, lon: float, location_name: str):
-    # Live NOAA CO-OPS Station for Southeastern NC
     if 33.8 <= lat <= 34.5 and -78.2 <= lon <= -77.7:
         try:
             url = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?date=today&station=8658120&product=predictions&datum=MLLW&time_zone=lst_ldt&interval=hilo&units=english&format=json"
@@ -236,7 +349,6 @@ def fetch_noaa_tides(lat: float, lon: float, location_name: str):
         except Exception:
             pass
 
-    # Astronomical tidal model for all other North American coastal sectors
     now_dt = datetime.now()
     t1 = (now_dt + timedelta(hours=2, minutes=15)).strftime("%I:%M %p").lstrip("0")
     t2 = (now_dt + timedelta(hours=8, minutes=30)).strftime("%I:%M %p").lstrip("0")
@@ -250,7 +362,7 @@ def fetch_noaa_tides(lat: float, lon: float, location_name: str):
     )
 
 def fetch_noaa_alerts(lat: float, lon: float):
-    headers = {"User-Agent": "ThickMooseWeather/2.0 (contact@thickmoose.io)"}
+    headers = {"User-Agent": "ThickMooseWeather/2.0 (contact@thickmooselabs.com)"}
     extreme_alerts = []
     tropical_alerts = []
     try:
@@ -459,14 +571,13 @@ def fetch_live_sports_events(sport_query: str):
     return events
 
 def fetch_comprehensive_weather(lat: float, lon: float):
-    headers = {"User-Agent": "ThickMooseWeather/2.0 (contact@thickmoose.io)"}
+    headers = {"User-Agent": "ThickMooseWeather/2.0 (contact@thickmooselabs.com)"}
     curr_obs = None
     raw_hourly = []
     daily_forecasts = []
     sun_times = {"sunrise": "06:45 AM", "sunset": "07:15 PM"}
     apparent_temp_fallback = None
 
-    # Open-Meteo with dynamic timezone resolution
     resolved_tz = ZoneInfo("America/New_York")
     try:
         om_url = (
@@ -568,7 +679,6 @@ def fetch_comprehensive_weather(lat: float, lon: float):
     except Exception:
         pass
 
-    # NWS Station Overlay (for US coordinates)
     try:
         pts = requests.get(f"https://api.weather.gov/points/{round(lat, 4)},{round(lon, 4)}", headers=headers, timeout=3).json()
         props = pts.get("properties", {})
@@ -642,7 +752,6 @@ def fetch_comprehensive_weather(lat: float, lon: float):
 def generate_microclimate_profile(lat: float, lon: float, elev_ft: int, location_name: str):
     is_coast = is_coastal_region(lat, lon)
 
-    # Dynamic Agricultural Windows across North America
     if lat >= 44.0 or elev_ft >= 3500:
         garden_season = [
             {"item": "Cold-Hardy Greens & Roots", "action": "Row Cover Production", "timing": "Harvest steadily; protect crowns from hard mountain frost"},
@@ -710,7 +819,7 @@ def calculate_6hr_forecast_metrics(curr_temp, curr_wind, hourly_36):
 def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC State"):
     lat, lon, elev_ft, location_name = get_coordinates(query)
     if lat is None or lon is None:
-        raise HTTPException(status_code=404, detail="Location not found. Please provide a valid street address, city, or postal code.")
+        raise HTTPException(status_code=404, detail=f"Location not recognized. Please check your city, state, or ZIP code.")
 
     live_aqi = fetch_live_aqi(lat, lon)
     live, hourly_36, daily_list, sun_times, local_tz = fetch_comprehensive_weather(lat, lon)
@@ -850,7 +959,7 @@ def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC St
             "enso_index": "NOAA Climate Prediction Center (CPC): ENSO Advisory Active — Extreme El Niño Pattern. Equatorial Pacific SST anomalies running +2.0°C to +2.5°C above baseline across the Niño 3.4 region. Driving an energized subtropical jet stream across North America, steering frequent low-pressure tracks and active precipitation corridors.",
             "tropical_updates": tropical_alerts_str,
             "extreme_weather_24h": extreme_alerts_str,
-            "drought_index": f"{drought_source}: Status: None to Normal Soil Moisture Profile. Regional watershed display zero hydrological deficit with seasonal precipitation sustaining baseline levels."
+            "drought_index": f"{drought_source}: Status: None to Normal Soil Moisture Profile. Regional watershed displays normal baseline moisture reserves with seasonal precipitation totals sustaining stable hydrology."
         },
         "outdoor_activities": outdoor_activities,
         "lifestyle": {

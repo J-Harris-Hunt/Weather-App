@@ -46,10 +46,9 @@ async def main(page: ft.Page):
     widget_uv_badge = ft.Text("☀️ UV --", size=11, color="orange200", weight=ft.FontWeight.BOLD)
     widget_aqi_badge = ft.Text("🍃 AQI --", size=11, color="green300", weight=ft.FontWeight.BOLD)
 
-    # Location input starts blank for visitors
     location_input = ft.TextField(
         label="Location (Address, City, or ZIP)",
-        hint_text="e.g. 100 Main St, Austin, TX or 90210",
+        hint_text="e.g. NC, Wilmington, 28412 or Denver, CO",
         value="",
         width=300,
         border_color="amber300",
@@ -65,6 +64,17 @@ async def main(page: ft.Page):
         focused_border_color="amber200",
         dense=True
     )
+
+    # Restore persisted preferences from browser storage
+    try:
+        saved_loc = await page.client_storage.get_async("tmw_saved_location")
+        if saved_loc:
+            location_input.value = saved_loc
+        saved_teams = await page.client_storage.get_async("tmw_saved_teams")
+        if saved_teams:
+            sports_input.value = saved_teams
+    except Exception:
+        pass
 
     location_display_text = ft.Text("📍 Enter address or tap 📍 to auto-detect", size=14, color="cyan200", weight=ft.FontWeight.W_600)
     condition_text = ft.Text("Ready for location", size=18, weight=ft.FontWeight.BOLD, color="amber200")
@@ -487,10 +497,20 @@ async def main(page: ft.Page):
 
     async def auto_detect_gps(e):
         import server
-        detected_loc, lat, lon, loc_label = server.auto_detect_location()
-        if detected_loc:
-            location_input.value = detected_loc
-            await load_weather()
+        client_ip = getattr(page, "client_ip", None)
+        location_display_text.value = "📍 Detecting location..."
+        page.update()
+        try:
+            detected_loc, lat, lon, loc_label = server.auto_detect_location(client_ip)
+            if detected_loc:
+                location_input.value = detected_loc
+                await load_weather()
+            else:
+                location_display_text.value = "📍 Could not detect location. Please type your city or ZIP."
+                page.update()
+        except Exception as ex:
+            location_display_text.value = f"📍 Location detection error: {ex}"
+            page.update()
 
     async def load_weather(e=None):
         loc = location_input.value.strip()
@@ -633,7 +653,8 @@ async def main(page: ft.Page):
             category_cards_column.controls = build_cards_for_category(current_selected_category[0])
             page.update()
         except Exception as ex:
-            condition_text.value = f"Error: {ex}"
+            condition_text.value = "Location not found"
+            location_display_text.value = f"📍 {ex}"
             page.update()
 
     location_input.on_submit = load_weather
@@ -763,7 +784,6 @@ async def main(page: ft.Page):
 
     page.add(full_dashboard)
 
-    # Check for previously saved location; if present, restore and load
     try:
         saved_loc = await page.client_storage.get_async("tmw_saved_location")
         if saved_loc:
