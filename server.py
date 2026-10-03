@@ -157,6 +157,34 @@ def is_coastal_region(lat: float, lon: float) -> bool:
         return True
     return False
 
+def fetch_live_aqi(lat: float, lon: float):
+    try:
+        url = f"https://air-quality-api.open-meteo.com/v1/air-quality?latitude={lat}&longitude={lon}&current=us_aqi"
+        res = requests.get(url, timeout=3).json()
+        val = res.get("current", {}).get("us_aqi", 35)
+        if val <= 50:
+            cat = "Good"
+        elif val <= 100:
+            cat = "Moderate"
+        elif val <= 150:
+            cat = "Unhealthy for Sensitive Groups"
+        elif val <= 200:
+            cat = "Unhealthy"
+        else:
+            cat = "Very Unhealthy"
+        return {"aqi": int(val), "category": cat}
+    except Exception:
+        return {"aqi": 35, "category": "Good"}
+
+def calculate_heat_index(temp_f: float, rh: float) -> int:
+    if temp_f < 80 or rh < 40:
+        return round(temp_f)
+    hi = (-42.379 + 2.04901523 * temp_f + 10.14333127 * rh
+          - 0.22475541 * temp_f * rh - 0.00683783 * (temp_f ** 2)
+          - 0.05481717 * (rh ** 2) + 0.00122874 * (temp_f ** 2) * rh
+          + 0.00085282 * temp_f * (rh ** 2) - 0.00000199 * (temp_f ** 2) * (rh ** 2))
+    return round(hi)
+
 def fetch_comprehensive_weather(lat: float, lon: float, local_tz: ZoneInfo):
     headers = {"User-Agent": "ThickMooseWeather/2.0 (contact@thickmoose.io)"}
     curr_obs = None
@@ -164,7 +192,7 @@ def fetch_comprehensive_weather(lat: float, lon: float, local_tz: ZoneInfo):
     daily_forecasts = []
     sun_times = {"sunrise": "06:45 AM", "sunset": "07:15 PM"}
     
-    # 1. Primary: National Weather Service API (Observations & Hourly)
+    # 1. Primary: National Weather Service API
     try:
         pts = requests.get(f"https://api.weather.gov/points/{round(lat, 4)},{round(lon, 4)}", headers=headers, timeout=4).json()
         props = pts.get("properties", {})
@@ -179,12 +207,19 @@ def fetch_comprehensive_weather(lat: float, lon: float, local_tz: ZoneInfo):
                 obs = requests.get(f"https://api.weather.gov/stations/{stn_id}/observations/latest", headers=headers, timeout=4).json()
                 p = obs.get("properties", {})
                 temp_c = p.get("temperature", {}).get("value")
-                if temp_c is not None:
+                wind_speed_raw = p.get("windSpeed", {}).get("value")
+                rh_raw = p.get("relativeHumidity", {}).get("value")
+                
+                if temp_c is not None and wind_speed_raw is not None:
+                    t_f = round((temp_c * 9/5) + 32)
+                    w_mph = round(wind_speed_raw * 0.621371, 1)
+                    hum_val = round(rh_raw if rh_raw is not None else 65.0, 1)
                     curr_obs = {
-                        "temp": round((temp_c * 9/5) + 32),
+                        "temp": t_f,
                         "condition": p.get("textDescription") or "Clear",
-                        "wind": round((p.get("windSpeed", {}).get("value") or 0.0) * 0.621371, 1),
-                        "humidity": round(p.get("relativeHumidity", {}).get("value") or 88.0, 1)
+                        "wind": w_mph,
+                        "humidity": hum_val,
+                        "heat_index": calculate_heat_index(t_f, hum_val)
                     }
 
         if hourly_url:
@@ -214,24 +249,26 @@ def fetch_comprehensive_weather(lat: float, lon: float, local_tz: ZoneInfo):
     try:
         om_url = (
             f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
-            f"&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code"
+            f"&current=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,weather_code"
             f"&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation_probability,weather_code"
             f"&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset"
             f"&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto"
         )
         om_res = requests.get(om_url, timeout=4).json()
 
-        # Fallback current observation if NWS was offline
         if not curr_obs:
             curr_data = om_res.get("current", {})
+            t_f = round(curr_data.get("temperature_2m", 66))
+            hum_val = round(curr_data.get("relative_humidity_2m", 65.0), 1)
+            app_t = curr_data.get("apparent_temperature")
             curr_obs = {
-                "temp": round(curr_data.get("temperature_2m", 66)),
+                "temp": t_f,
                 "condition": WMO_CODE_MAP.get(curr_data.get("weather_code", 0), "Clear"),
                 "wind": round(curr_data.get("wind_speed_10m", 0.0), 1),
-                "humidity": round(curr_data.get("relative_humidity_2m", 70.0), 1)
+                "humidity": hum_val,
+                "heat_index": round(app_t) if app_t is not None else calculate_heat_index(t_f, hum_val)
             }
 
-        # Backup hourly if NWS didn't return
         if not raw_hourly:
             h_data = om_res.get("hourly", {})
             h_times = h_data.get("time", [])
@@ -257,7 +294,6 @@ def fetch_comprehensive_weather(lat: float, lon: float, local_tz: ZoneInfo):
                 if len(raw_hourly) >= 36:
                     break
 
-        # Parse live daily values
         daily_data = om_res.get("daily", {})
         dates = daily_data.get("time", [])
         highs = daily_data.get("temperature_2m_max", [])
@@ -306,9 +342,8 @@ def fetch_comprehensive_weather(lat: float, lon: float, local_tz: ZoneInfo):
         pass
 
     if not curr_obs:
-        curr_obs = {"temp": 66, "condition": "Clear", "wind": 5.0, "humidity": 65.0}
+        curr_obs = {"temp": 66, "condition": "Clear", "wind": 5.0, "humidity": 65.0, "heat_index": 66}
 
-    # Hourly calibration
     base_t = curr_obs["temp"]
     calibrated_hourly = []
     now_local = datetime.now(local_tz)
@@ -424,11 +459,14 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
     local_tz = get_timezone_for_coordinates(lon)
     now = datetime.now(local_tz)
 
+    live_aqi = fetch_live_aqi(lat, lon)
     live, hourly_36, daily_list, sun_times = fetch_comprehensive_weather(lat, lon, local_tz)
+    
     curr_temp = live["temp"]
     curr_cond = live["condition"]
     curr_wind = live["wind"]
     curr_hum = live["humidity"]
+    curr_heat_index = live.get("heat_index", curr_temp)
     is_coast = is_coastal_region(lat, lon)
 
     dew_point = round(curr_temp - ((100 - curr_hum) / 5))
@@ -497,11 +535,10 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
 
     surf_score = max(30, min(95, round(60 + (avg_wind_6h * 1.8) - (rain_penalty * 0.3)))) if is_coast else 40
 
-    # Structured Outdoor Activities (Clean text, no LaTeX artifacts)
     outdoor_activities = {
         "beach_and_sunbathing": {
             "score": beach_score,
-            "details": f"{'🏖️ Coastal Shore' if is_coast else '☀️️ Inland Recreation'}: Now {curr_temp}°F → 6-hour trend ~{avg_temp_6h}°F with {avg_wind_6h} mph winds.\n• {'Optimal beach window with light shore winds.' if avg_temp_6h >= 75 and avg_wind_6h < 14 and max_rain_6h < 20 else 'Brisk shore breezes; warm layers or windbreaker suggested.' if avg_wind_6h >= 14 else 'Cooler coastal temps; midday peak recommended.'}\n• {six_hour_summary}."
+            "details": f"{'🏖️️ Coastal Shore' if is_coast else '☀ Inland Recreation'}: Now {curr_temp}°F → 6-hour trend ~{avg_temp_6h}°F with {avg_wind_6h} mph winds.\n• {'Optimal beach window with light shore winds.' if avg_temp_6h >= 75 and avg_wind_6h < 14 and max_rain_6h < 20 else 'Brisk shore breezes; warm layers or windbreaker suggested.' if avg_wind_6h >= 14 else 'Cooler coastal temps; midday peak recommended.'}\n• {six_hour_summary}."
         },
         "swimming_and_water": {
             "score": swim_score,
@@ -549,11 +586,19 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
         }
     }
 
+    if max_rain_6h >= 40:
+        boundary_desc = f"Unsettled boundary layer: active precipitation potential ({max_rain_6h}% peak over 6h)."
+    elif curr_wind >= 14:
+        boundary_desc = f"Breezy frontal mixing with surface gusts around {curr_wind} mph."
+    else:
+        boundary_desc = "Mild boundary layer with light surface flow."
+
     return {
         "lat": lat, "lon": lon, "elevation_ft": elev_ft, "location_name": location_name,
         "radar_url": radar_url,
         "current": {
             "temp": curr_temp,
+            "heat_index": curr_heat_index,
             "humidity": curr_hum,
             "wind": curr_wind,
             "condition": curr_cond,
@@ -564,11 +609,11 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
             "moon_rise": "08:15 PM",
             "moon_set": "09:30 AM",
             "precip_summary": f"Precip Now: 0% | 6h Peak: {max_rain_6h}% | Daily Max: {daily_list[0]['rain_prob_max']}%",
-            "rain_duration": "Stable atmospheric boundary layer across the immediate area."
+            "rain_duration": boundary_desc
         },
         "hourly_36": hourly_36,
         "daily": daily_list,
-        "aqi": {"aqi": 32, "category": "Good"},
+        "aqi": live_aqi,
         "weather_climate": {
             "microclimate_memo": micro_memo,
             "watershed_overview": f"Target Waterway: {boating_body}",
