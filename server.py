@@ -36,7 +36,7 @@ SPORTS_DB = {
     "broncos": ("Denver Broncos (NFL)", "Empower Field at Mile High (Denver, CO)", "Sunday 4:25 PM", "62°F, High plains breeze, Wind 8 mph"),
     "cowboys": ("Dallas Cowboys (NFL)", "AT&T Stadium (Arlington, TX)", "Sunday 1:00 PM", "72°F (Climate-controlled)"),
     "eagles": ("Philadelphia Eagles (NFL)", "Lincoln Financial Field (Philadelphia, PA)", "Sunday 1:00 PM", "65°F, Crisp autumn air, Wind 7 mph"),
-    "chiefs": ("Kansas City Chiefs (NFL)", "Arrowhead Stadium (Kansas City, MO)", "Sunday 4:25 PM", "68°F, Clear sky, Wind 9 mph"),
+    "chiefs": ("Kansas Chief (NFL)", "Arrowhead Stadium (Kansas City, MO)", "Sunday 4:25 PM", "68°F, Clear sky, Wind 9 mph"),
 }
 
 WMO_CODE_MAP = {
@@ -161,7 +161,7 @@ def fetch_live_aqi(lat: float, lon: float):
     try:
         url = f"https://air-quality-api.open-meteo.com/v1/air-quality?latitude={lat}&longitude={lon}&current=us_aqi"
         res = requests.get(url, timeout=3).json()
-        val = res.get("current", {}).get("us_aqi", 35)
+        val = int(res.get("current", {}).get("us_aqi", 35))
         if val <= 50:
             cat = "Good"
         elif val <= 100:
@@ -172,18 +172,9 @@ def fetch_live_aqi(lat: float, lon: float):
             cat = "Unhealthy"
         else:
             cat = "Very Unhealthy"
-        return {"aqi": int(val), "category": cat}
+        return {"aqi": val, "value": val, "category": cat, "status": f"{val} ({cat})"}
     except Exception:
-        return {"aqi": 35, "category": "Good"}
-
-def calculate_heat_index(temp_f: float, rh: float) -> int:
-    if temp_f < 80 or rh < 40:
-        return round(temp_f)
-    hi = (-42.379 + 2.04901523 * temp_f + 10.14333127 * rh
-          - 0.22475541 * temp_f * rh - 0.00683783 * (temp_f ** 2)
-          - 0.05481717 * (rh ** 2) + 0.00122874 * (temp_f ** 2) * rh
-          + 0.00085282 * temp_f * (rh ** 2) - 0.00000199 * (temp_f ** 2) * (rh ** 2))
-    return round(hi)
+        return {"aqi": 35, "value": 35, "category": "Good", "status": "35 (Good)"}
 
 def fetch_comprehensive_weather(lat: float, lon: float, local_tz: ZoneInfo):
     headers = {"User-Agent": "ThickMooseWeather/2.0 (contact@thickmoose.io)"}
@@ -192,108 +183,33 @@ def fetch_comprehensive_weather(lat: float, lon: float, local_tz: ZoneInfo):
     daily_forecasts = []
     sun_times = {"sunrise": "06:45 AM", "sunset": "07:15 PM"}
     
-    # 1. Primary: National Weather Service API
-    try:
-        pts = requests.get(f"https://api.weather.gov/points/{round(lat, 4)},{round(lon, 4)}", headers=headers, timeout=4).json()
-        props = pts.get("properties", {})
-        hourly_url = props.get("forecastHourly")
-        stn_url = props.get("observationStations")
-
-        if stn_url:
-            stn_res = requests.get(stn_url, headers=headers, timeout=4).json()
-            features = stn_res.get("features", [])
-            if features:
-                stn_id = features[0].get("properties", {}).get("stationIdentifier")
-                obs = requests.get(f"https://api.weather.gov/stations/{stn_id}/observations/latest", headers=headers, timeout=4).json()
-                p = obs.get("properties", {})
-                temp_c = p.get("temperature", {}).get("value")
-                wind_speed_raw = p.get("windSpeed", {}).get("value")
-                rh_raw = p.get("relativeHumidity", {}).get("value")
-                
-                if temp_c is not None and wind_speed_raw is not None:
-                    t_f = round((temp_c * 9/5) + 32)
-                    w_mph = round(wind_speed_raw * 0.621371, 1)
-                    hum_val = round(rh_raw if rh_raw is not None else 65.0, 1)
-                    curr_obs = {
-                        "temp": t_f,
-                        "condition": p.get("textDescription") or "Clear",
-                        "wind": w_mph,
-                        "humidity": hum_val,
-                        "heat_index": calculate_heat_index(t_f, hum_val)
-                    }
-
-        if hourly_url:
-            h_res = requests.get(hourly_url, headers=headers, timeout=4).json()
-            periods = h_res.get("properties", {}).get("periods", [])
-            now_local = datetime.now(local_tz)
-            for hp in periods:
-                st = hp.get("startTime", "")
-                dt_obj = datetime.fromisoformat(st).astimezone(local_tz) if st else datetime.now(local_tz)
-                if dt_obj >= now_local - timedelta(minutes=50):
-                    raw_hourly.append({
-                        "dt": dt_obj,
-                        "time": dt_obj.strftime("%I %p").lstrip("0"),
-                        "hour": dt_obj.strftime("%I %p").lstrip("0"),
-                        "temp": hp.get("temperature", 66),
-                        "condition": hp.get("shortForecast", "Clear"),
-                        "rain_chance": hp.get("probabilityOfPrecipitation", {}).get("value") or 0,
-                        "is_night": not hp.get("isDaytime", True),
-                        "wind_mph": float(str(hp.get("windSpeed", "5")).split()[0]) if hp.get("windSpeed") else 5.0
-                    })
-                if len(raw_hourly) >= 36:
-                    break
-    except Exception:
-        pass
-
-    # 2. Daily Forecasts + Fallback via Open-Meteo
+    # 1. Open-Meteo Current & Hourly (reliable source for Apparent Temp / Heat Index & live surface winds)
+    apparent_temp_fallback = None
     try:
         om_url = (
             f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
             f"&current=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,weather_code"
-            f"&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation_probability,weather_code"
+            f"&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,precipitation_probability,weather_code"
             f"&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset"
             f"&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto"
         )
         om_res = requests.get(om_url, timeout=4).json()
+        
+        curr_data = om_res.get("current", {})
+        t_f = round(curr_data.get("temperature_2m", 66))
+        hum_val = round(curr_data.get("relative_humidity_2m", 65.0), 1)
+        apparent_temp_fallback = round(curr_data.get("apparent_temperature", t_f))
+        
+        curr_obs = {
+            "temp": t_f,
+            "condition": WMO_CODE_MAP.get(curr_data.get("weather_code", 0), "Clear"),
+            "wind": round(curr_data.get("wind_speed_10m", 0.0), 1),
+            "humidity": hum_val,
+            "heat_index": apparent_temp_fallback,
+            "feels_like": apparent_temp_fallback
+        }
 
-        if not curr_obs:
-            curr_data = om_res.get("current", {})
-            t_f = round(curr_data.get("temperature_2m", 66))
-            hum_val = round(curr_data.get("relative_humidity_2m", 65.0), 1)
-            app_t = curr_data.get("apparent_temperature")
-            curr_obs = {
-                "temp": t_f,
-                "condition": WMO_CODE_MAP.get(curr_data.get("weather_code", 0), "Clear"),
-                "wind": round(curr_data.get("wind_speed_10m", 0.0), 1),
-                "humidity": hum_val,
-                "heat_index": round(app_t) if app_t is not None else calculate_heat_index(t_f, hum_val)
-            }
-
-        if not raw_hourly:
-            h_data = om_res.get("hourly", {})
-            h_times = h_data.get("time", [])
-            h_temps = h_data.get("temperature_2m", [])
-            h_rains = h_data.get("precipitation_probability", [])
-            h_codes = h_data.get("weather_code", [])
-            h_winds = h_data.get("wind_speed_10m", [])
-            now_local = datetime.now(local_tz)
-
-            for idx, t_str in enumerate(h_times):
-                dt_obj = datetime.fromisoformat(t_str).astimezone(local_tz)
-                if dt_obj >= now_local - timedelta(minutes=50):
-                    raw_hourly.append({
-                        "dt": dt_obj,
-                        "time": dt_obj.strftime("%I %p").lstrip("0"),
-                        "hour": dt_obj.strftime("%I %p").lstrip("0"),
-                        "temp": round(h_temps[idx]) if idx < len(h_temps) else 65,
-                        "condition": WMO_CODE_MAP.get(h_codes[idx], "Partly Cloudy") if idx < len(h_codes) else "Clear",
-                        "rain_chance": h_rains[idx] if idx < len(h_rains) else 0,
-                        "is_night": (dt_obj.hour < 7 or dt_obj.hour >= 19),
-                        "wind_mph": round(h_winds[idx], 1) if idx < len(h_winds) else 5.0
-                    })
-                if len(raw_hourly) >= 36:
-                    break
-
+        # Daily Forecasts
         daily_data = om_res.get("daily", {})
         dates = daily_data.get("time", [])
         highs = daily_data.get("temperature_2m_max", [])
@@ -338,11 +254,69 @@ def fetch_comprehensive_weather(lat: float, lon: float, local_tz: ZoneInfo):
                 "day_summary": f"{c_desc} with highs near {h_val}°F. Rain chance {r_val}%.",
                 "night_summary": f"Clear to partly cloudy cooling to near {l_val}°F."
             })
+
+        # Hourly data
+        h_data = om_res.get("hourly", {})
+        h_times = h_data.get("time", [])
+        h_temps = h_data.get("temperature_2m", [])
+        h_rains = h_data.get("precipitation_probability", [])
+        h_codes = h_data.get("weather_code", [])
+        h_winds = h_data.get("wind_speed_10m", [])
+        now_local = datetime.now(local_tz)
+
+        for idx, t_str in enumerate(h_times):
+            dt_obj = datetime.fromisoformat(t_str).astimezone(local_tz)
+            if dt_obj >= now_local - timedelta(minutes=50):
+                raw_hourly.append({
+                    "dt": dt_obj,
+                    "time": dt_obj.strftime("%I %p").lstrip("0"),
+                    "hour": dt_obj.strftime("%I %p").lstrip("0"),
+                    "temp": round(h_temps[idx]) if idx < len(h_temps) else 65,
+                    "condition": WMO_CODE_MAP.get(h_codes[idx], "Partly Cloudy") if idx < len(h_codes) else "Clear",
+                    "rain_chance": h_rains[idx] if idx < len(h_rains) else 0,
+                    "is_night": (dt_obj.hour < 7 or dt_obj.hour >= 19),
+                    "wind_mph": round(h_winds[idx], 1) if idx < len(h_winds) else 5.0
+                })
+            if len(raw_hourly) >= 36:
+                break
+    except Exception:
+        pass
+
+    # 2. National Weather Service API (Overlays precise localized observation if available)
+    try:
+        pts = requests.get(f"https://api.weather.gov/points/{round(lat, 4)},{round(lon, 4)}", headers=headers, timeout=3).json()
+        props = pts.get("properties", {})
+        stn_url = props.get("observationStations")
+
+        if stn_url:
+            stn_res = requests.get(stn_url, headers=headers, timeout=3).json()
+            features = stn_res.get("features", [])
+            if features:
+                stn_id = features[0].get("properties", {}).get("stationIdentifier")
+                obs = requests.get(f"https://api.weather.gov/stations/{stn_id}/observations/latest", headers=headers, timeout=3).json()
+                p = obs.get("properties", {})
+                temp_c = p.get("temperature", {}).get("value")
+                wind_speed_raw = p.get("windSpeed", {}).get("value")
+                rh_raw = p.get("relativeHumidity", {}).get("value")
+                
+                if temp_c is not None and wind_speed_raw is not None:
+                    t_f = round((temp_c * 9/5) + 32)
+                    w_mph = round(wind_speed_raw * 0.621371, 1)
+                    hum_val = round(rh_raw if rh_raw is not None else 65.0, 1)
+                    heat_idx = apparent_temp_fallback if apparent_temp_fallback is not None else t_f
+                    curr_obs = {
+                        "temp": t_f,
+                        "condition": p.get("textDescription") or "Clear",
+                        "wind": w_mph,
+                        "humidity": hum_val,
+                        "heat_index": heat_idx,
+                        "feels_like": heat_idx
+                    }
     except Exception:
         pass
 
     if not curr_obs:
-        curr_obs = {"temp": 66, "condition": "Clear", "wind": 5.0, "humidity": 65.0, "heat_index": 66}
+        curr_obs = {"temp": 66, "condition": "Clear", "wind": 5.0, "humidity": 65.0, "heat_index": 66, "feels_like": 66}
 
     base_t = curr_obs["temp"]
     calibrated_hourly = []
@@ -467,6 +441,7 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
     curr_wind = live["wind"]
     curr_hum = live["humidity"]
     curr_heat_index = live.get("heat_index", curr_temp)
+    curr_feels_like = live.get("feels_like", curr_heat_index)
     is_coast = is_coastal_region(lat, lon)
 
     dew_point = round(curr_temp - ((100 - curr_hum) / 5))
@@ -538,7 +513,7 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
     outdoor_activities = {
         "beach_and_sunbathing": {
             "score": beach_score,
-            "details": f"{'🏖️️ Coastal Shore' if is_coast else '☀ Inland Recreation'}: Now {curr_temp}°F → 6-hour trend ~{avg_temp_6h}°F with {avg_wind_6h} mph winds.\n• {'Optimal beach window with light shore winds.' if avg_temp_6h >= 75 and avg_wind_6h < 14 and max_rain_6h < 20 else 'Brisk shore breezes; warm layers or windbreaker suggested.' if avg_wind_6h >= 14 else 'Cooler coastal temps; midday peak recommended.'}\n• {six_hour_summary}."
+            "details": f"{'🏖 Coastal Shore' if is_coast else '☀ Inland Recreation'}: Now {curr_temp}°F → 6-hour trend ~{avg_temp_6h}°F with {avg_wind_6h} mph winds.\n• {'Optimal beach window with light shore winds.' if avg_temp_6h >= 75 and avg_wind_6h < 14 and max_rain_6h < 20 else 'Brisk shore breezes; warm layers or windbreaker suggested.' if avg_wind_6h >= 14 else 'Cooler coastal temps; midday peak recommended.'}\n• {six_hour_summary}."
         },
         "swimming_and_water": {
             "score": swim_score,
@@ -599,6 +574,7 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
         "current": {
             "temp": curr_temp,
             "heat_index": curr_heat_index,
+            "feels_like": curr_feels_like,
             "humidity": curr_hum,
             "wind": curr_wind,
             "condition": curr_cond,
@@ -609,7 +585,10 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
             "moon_rise": "08:15 PM",
             "moon_set": "09:30 AM",
             "precip_summary": f"Precip Now: 0% | 6h Peak: {max_rain_6h}% | Daily Max: {daily_list[0]['rain_prob_max']}%",
-            "rain_duration": boundary_desc
+            "rain_duration": boundary_desc,
+            "aqi": live_aqi.get("value", 35),
+            "air_quality": live_aqi.get("category", "Good"),
+            "aqi_category": live_aqi.get("category", "Good")
         },
         "hourly_36": hourly_36,
         "daily": daily_list,
