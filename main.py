@@ -63,6 +63,17 @@ async def main(page: ft.Page):
         dense=True
     )
 
+    # Restore persisted preferences from browser storage
+    try:
+        saved_loc = await page.client_storage.get_async("tmw_saved_location")
+        if saved_loc:
+            location_input.value = saved_loc
+        saved_teams = await page.client_storage.get_async("tmw_saved_teams")
+        if saved_teams:
+            sports_input.value = saved_teams
+    except Exception:
+        pass
+
     location_display_text = ft.Text("📍 Wilmington (28412 / Lords Creek), NC", size=14, color="cyan200", weight=ft.FontWeight.W_600)
     condition_text = ft.Text("Loading weather data...", size=18, weight=ft.FontWeight.BOLD, color="amber200")
     hero_weather_icon = ft.Icon(ft.Icons.WB_SUNNY, size=64, color="amber300")
@@ -381,6 +392,14 @@ async def main(page: ft.Page):
     async def load_weather(e=None):
         loc = location_input.value.strip() or "28412"
         teams = sports_input.value.strip() or "Panthers, Braves"
+
+        # Persist preferences to browser client storage
+        try:
+            await page.client_storage.set_async("tmw_saved_location", loc)
+            await page.client_storage.set_async("tmw_saved_teams", teams)
+        except Exception:
+            pass
+
         try:
             import server
             res = server.get_full_weather_data(query=loc, sport_team=teams)
@@ -395,7 +414,6 @@ async def main(page: ft.Page):
             t_val = curr.get("temp", 74)
             feels_val = curr.get("feels_like", curr.get("heat_index", t_val))
 
-            # Update radar link and live sync timestamp
             if "radar_url" in res:
                 radar_button_widget.url = res["radar_url"]
             radar_time_val = res.get("radar_time", datetime.now().strftime("%I:%M %p").lstrip("0"))
@@ -415,7 +433,6 @@ async def main(page: ft.Page):
             uv_val = curr.get("uv_index", 4.0)
             uv_badge.value = f"UV: {uv_val}"
 
-            # AQI extraction from response
             aqi_obj = res.get("aqi", {})
             if isinstance(aqi_obj, dict):
                 aqi_num = aqi_obj.get("value", aqi_obj.get("aqi", "--"))
@@ -554,7 +571,6 @@ async def main(page: ft.Page):
 
     feedback_section = ft.Container(
         content=ft.Row([
-            # Suggestions and Praise Button
             ft.Container(
                 content=ft.Column([
                     ft.Text("📬 ✨", size=32, text_align=ft.TextAlign.CENTER),
@@ -570,7 +586,6 @@ async def main(page: ft.Page):
                 tooltip="Send suggestions or praise",
                 url=praise_mailto,
             ),
-            # Problems and Complaints (Perched on a Bear Trap)
             ft.Container(
                 content=ft.Column([
                     ft.Row([

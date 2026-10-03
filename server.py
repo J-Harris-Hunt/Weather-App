@@ -26,17 +26,24 @@ LOCAL_MICROCLIMATES = {
     "28461": (33.9210, -78.0200, 20, "Southport & Oak Island (28461), NC"),
 }
 
-SPORTS_DB = {
-    "panthers": ("Carolina Panthers (NFL)", "Bank of America Stadium (Charlotte, NC)", "Sunday 1:00 PM vs Falcons", "76°F, Sunny, Wind 5 mph"),
-    "braves": ("Atlanta Braves (MLB)", "Truist Park (Atlanta, GA)", "Today 7:20 PM vs Marlins", "74°F, Clear sky, Wind 4 mph"),
-    "wolfpack": ("NC State Wolfpack (NCAA)", "Carter-Finley Stadium (Raleigh, NC)", "Saturday 3:30 PM", "80°F, Partly cloudy, Wind 6 mph"),
-    "tar heels": ("UNC Tar Heels (NCAA)", "Kenan Memorial Stadium (Chapel Hill, NC)", "Saturday 12:00 PM", "78°F, Mostly sunny, Wind 4 mph"),
-    "duke": ("Duke Blue Devils (NCAA)", "Wallace Wade Stadium (Durham, NC)", "Saturday 7:00 PM", "72°F, Clear sky, Wind 3 mph"),
-    "hurricanes": ("Carolina Hurricanes (NHL)", "Lenovo Center (Raleigh, NC)", "Thursday 7:00 PM", "68°F (Indoor Arena)"),
-    "broncos": ("Denver Broncos (NFL)", "Empower Field at Mile High (Denver, CO)", "Sunday 4:25 PM", "62°F, High plains breeze, Wind 8 mph"),
-    "cowboys": ("Dallas Cowboys (NFL)", "AT&T Stadium (Arlington, TX)", "Sunday 1:00 PM", "72°F (Climate-controlled)"),
-    "eagles": ("Philadelphia Eagles (NFL)", "Lincoln Financial Field (Philadelphia, PA)", "Sunday 1:00 PM", "65°F, Crisp autumn air, Wind 7 mph"),
-    "chiefs": ("Kansas City Chiefs (NFL)", "Arrowhead Stadium (Kansas City, MO)", "Sunday 4:25 PM", "68°F, Clear sky, Wind 9 mph"),
+TEAM_STADIUM_MAP = {
+    "panthers": {"name": "Carolina Panthers (NFL)", "venue": "Bank of America Stadium (Charlotte, NC)", "lat": 35.2258, "lon": -80.8528, "indoor": False, "league": "nfl"},
+    "braves": {"name": "Atlanta Braves (MLB)", "venue": "Truist Park (Atlanta, GA)", "lat": 33.8908, "lon": -84.4678, "indoor": False, "league": "mlb"},
+    "wolfpack": {"name": "NC State Wolfpack (NCAA)", "venue": "Carter-Finley Stadium (Raleigh, NC)", "lat": 35.7954, "lon": -78.7103, "indoor": False, "league": "college-football"},
+    "tar heels": {"name": "UNC Tar Heels (NCAA)", "venue": "Kenan Memorial Stadium (Chapel Hill, NC)", "lat": 35.9070, "lon": -79.0479, "indoor": False, "league": "college-football"},
+    "duke": {"name": "Duke Blue Devils (NCAA)", "venue": "Wallace Wade Stadium (Durham, NC)", "lat": 35.9953, "lon": -78.9418, "indoor": False, "league": "college-football"},
+    "hurricanes": {"name": "Carolina Hurricanes (NHL)", "venue": "Lenovo Center (Raleigh, NC)", "lat": 35.8033, "lon": -78.7218, "indoor": True, "league": "nhl"},
+    "chiefs": {"name": "Kansas City Chiefs (NFL)", "venue": "Arrowhead Stadium (Kansas City, MO)", "lat": 39.0489, "lon": -94.4839, "indoor": False, "league": "nfl"},
+    "cowboys": {"name": "Dallas Cowboys (NFL)", "venue": "AT&T Stadium (Arlington, TX)", "lat": 32.7473, "lon": -97.0945, "indoor": True, "league": "nfl"},
+    "eagles": {"name": "Philadelphia Eagles (NFL)", "venue": "Lincoln Financial Field (Philadelphia, PA)", "lat": 39.9008, "lon": -75.1675, "indoor": False, "league": "nfl"},
+    "broncos": {"name": "Denver Broncos (NFL)", "venue": "Empower Field at Mile High (Denver, CO)", "lat": 39.7439, "lon": -105.0201, "indoor": False, "league": "nfl"},
+    "packers": {"name": "Green Bay Packers (NFL)", "venue": "Lambeau Field (Green Bay, WI)", "lat": 44.5013, "lon": -88.0622, "indoor": False, "league": "nfl"},
+    "bills": {"name": "Buffalo Bills (NFL)", "venue": "Highmark Stadium (Orchard Park, NY)", "lat": 42.7738, "lon": -78.7870, "indoor": False, "league": "nfl"},
+    "ravens": {"name": "Baltimore Ravens (NFL)", "venue": "M&T Bank Stadium (Baltimore, MD)", "lat": 39.2780, "lon": -76.6227, "indoor": False, "league": "nfl"},
+    "steelers": {"name": "Pittsburgh Steelers (NFL)", "venue": "Acrisure Stadium (Pittsburgh, PA)", "lat": 40.4468, "lon": -80.0158, "indoor": False, "league": "nfl"},
+    "yankees": {"name": "New York Yankees (MLB)", "venue": "Yankee Stadium (Bronx, NY)", "lat": 40.8296, "lon": -73.9262, "indoor": False, "league": "mlb"},
+    "red sox": {"name": "Boston Red Sox (MLB)", "venue": "Fenway Park (Boston, MA)", "lat": 42.3467, "lon": -71.0972, "indoor": False, "league": "mlb"},
+    "dodgers": {"name": "Los Angeles Dodgers (MLB)", "venue": "Dodger Stadium (Los Angeles, CA)", "lat": 34.0739, "lon": -118.2400, "indoor": False, "league": "mlb"},
 }
 
 WMO_CODE_MAP = {
@@ -178,7 +185,6 @@ def fetch_live_aqi(lat: float, lon: float):
 
 def fetch_noaa_tides(station_id="8658120"):
     try:
-        # NOAA CO-OPS Tides and Currents live prediction API
         url = f"https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?date=today&station={station_id}&product=predictions&datum=MLLW&time_zone=lst_ldt&interval=hilo&units=english&format=json"
         res = requests.get(url, timeout=3).json()
         predictions = res.get("predictions", [])
@@ -195,7 +201,6 @@ def fetch_noaa_tides(station_id="8658120"):
     except Exception:
         pass
     
-    # Astronomical tidal model fallback
     now_dt = datetime.now()
     t1 = (now_dt + timedelta(hours=2)).strftime("%I:%M %p").lstrip("0")
     t2 = (now_dt + timedelta(hours=8)).strftime("%I:%M %p").lstrip("0")
@@ -231,6 +236,105 @@ def fetch_noaa_alerts(lat: float, lon: float):
     tropical_text = " | ".join(tropical_alerts) if tropical_alerts else "National Hurricane Center (October Atlantic Basin): Active seasonal tracking in progress. Zero localized tropical storm, hurricane, or coastal surge warnings in effect for this grid sector."
 
     return extreme_text, tropical_text
+
+def fetch_stadium_live_weather(lat: float, lon: float, is_indoor: bool = False):
+    try:
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph"
+        res = requests.get(url, timeout=3).json()
+        curr = res.get("current", {})
+        t = round(curr.get("temperature_2m", 70))
+        w = round(curr.get("wind_speed_10m", 5.0), 1)
+        code = curr.get("weather_code", 0)
+        cond = WMO_CODE_MAP.get(code, "Clear")
+        if is_indoor:
+            return f"Outdoor: {t}°F, {cond}, Wind {w} mph • Stadium: 72°F (Climate-Controlled Dome)"
+        return f"{t}°F, {cond}, Wind {w} mph"
+    except Exception:
+        return "72°F, Fair, Wind 5 mph"
+
+def fetch_live_sports_events(sport_query: str):
+    events = []
+    default_teams = ["panthers", "braves"]
+    active_search = [s.strip().lower() for s in (sport_query or "").split(",") if s.strip()] or default_teams
+    
+    leagues = [
+        ("football", "nfl"),
+        ("football", "college-football"),
+        ("baseball", "mlb"),
+        ("hockey", "nhl")
+    ]
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+
+    for s_key in active_search:
+        event_found = False
+
+        # 1. Query ESPN live scoreboards
+        for sport, league in leagues:
+            try:
+                espn_url = f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{league}/scoreboard"
+                r = requests.get(espn_url, headers=headers, timeout=2.5).json()
+                for ev in r.get("events", []):
+                    ev_name = ev.get("name", "")
+                    ev_short = ev.get("shortName", "")
+                    if s_key in ev_name.lower() or s_key in ev_short.lower():
+                        date_str = ev.get("date", "")
+                        status_str = ev.get("status", {}).get("type", {}).get("detail", "")
+                        comp = ev.get("competitions", [{}])[0]
+                        venue = comp.get("venue", {})
+                        v_name = venue.get("fullName", "Stadium")
+                        city = venue.get("address", {}).get("city", "")
+                        state = venue.get("address", {}).get("state", "")
+                        venue_str = f"{v_name} ({city}, {state})" if city else v_name
+                        
+                        v_lat, v_lon, is_indoor = 35.2258, -80.8528, False
+                        for k, v in TEAM_STADIUM_MAP.items():
+                            if k in s_key or k in ev_name.lower():
+                                v_lat, v_lon, is_indoor = v["lat"], v["lon"], v["indoor"]
+                                break
+
+                        try:
+                            dt_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00")).astimezone(ZoneInfo("America/New_York"))
+                            time_formatted = dt_obj.strftime("%A %I:%M %p EDT")
+                        except Exception:
+                            time_formatted = status_str or "Game Time"
+
+                        cond_str = fetch_stadium_live_weather(v_lat, v_lon, is_indoor)
+                        events.append({
+                            "title": ev_name,
+                            "venue": venue_str,
+                            "time": f"{time_formatted} • {status_str}" if status_str and status_str != time_formatted else time_formatted,
+                            "conditions": cond_str
+                        })
+                        event_found = True
+                        break
+                if event_found:
+                    break
+            except Exception:
+                continue
+
+        # 2. Resilient fallback to known stadium map
+        if not event_found:
+            matched_known = False
+            for k, v in TEAM_STADIUM_MAP.items():
+                if s_key in k:
+                    cond_str = fetch_stadium_live_weather(v["lat"], v["lon"], v["indoor"])
+                    events.append({
+                        "title": v["name"],
+                        "venue": v["venue"],
+                        "time": "Upcoming Scheduled Fixture",
+                        "conditions": cond_str
+                    })
+                    matched_known = True
+                    break
+            if not matched_known and s_key:
+                events.append({
+                    "title": f"{s_key.title()} (Matchup)",
+                    "venue": "Regional Sports Complex",
+                    "time": "Upcoming Match Fixture",
+                    "conditions": "72°F, Fair, Wind 5 mph"
+                })
+
+    return events
 
 def fetch_comprehensive_weather(lat: float, lon: float, local_tz: ZoneInfo):
     headers = {"User-Agent": "ThickMooseWeather/2.0 (contact@thickmoose.io)"}
@@ -522,24 +626,7 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
                 "night_summary": f"Cooling to {curr_temp - 12}°F."
             })
 
-    sports_events = []
-    default_teams = ["panthers", "braves"]
-    active_search = [s.strip().lower() for s in (sport_team or "").split(",") if s.strip()] or default_teams
-
-    for s_key in active_search:
-        matched = False
-        for k, v in SPORTS_DB.items():
-            if s_key in k:
-                sports_events.append({"title": v[0], "venue": v[1], "time": v[2], "conditions": v[3]})
-                matched = True
-                break
-        if not matched and s_key:
-            sports_events.append({
-                "title": f"{s_key.title()} (Matchup)",
-                "venue": f"Local Stadium / Arena near {location_name}",
-                "time": "Upcoming Match Fixture",
-                "conditions": f"{curr_temp}°F, {curr_cond}, Wind {curr_wind} mph"
-            })
+    sports_events = fetch_live_sports_events(sport_team)
 
     tonight_low = daily_list[0]["low"]
     today_high = daily_list[0]["high"]
@@ -547,7 +634,6 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
     radar_url = f"https://www.rainviewer.com/map.html?loc={round(lat, 4)},{round(lon, 4)},8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=0&layer=radar&sm=1&sn=1"
     radar_time_str = now.strftime("%I:%M %p").lstrip("0")
 
-    # Outdoor Activities Scores
     beach_base = 100 - abs(avg_temp_6h - 82) * 2.0 - (avg_wind_6h * 1.5) - rain_penalty
     beach_score = max(20, min(99, round(beach_base if is_coast else beach_base - 10)))
 
@@ -656,7 +742,7 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
         "lifestyle": {
             "clothing": {
                 "morning": f"🌅 Morning ({tonight_low}°F): Crisp start. Light fleece, sweater, or layered hoodie suggested.",
-                "afternoon": f"☀️️ Afternoon ({today_high}°F): Mild sun. Comfortable breathable cottons, light long sleeves, or casual chinos.",
+                "afternoon": f"☀️ Afternoon ({today_high}°F): Mild sun. Comfortable breathable cottons, light long sleeves, or casual chinos.",
                 "night": f"🌙 Night ({tonight_low}°F): Cool drop. Medium layer or light windbreaker for evening outdoor events."
             },
             "hair_makeup": {
