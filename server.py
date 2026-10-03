@@ -271,31 +271,26 @@ def fetch_stadium_live_weather(lat: float, lon: float, is_indoor: bool = False):
         return "72°F, Fair, Wind 5 mph"
 
 def calculate_team_match_score(query: str, d_name: str, s_name: str, short_d: str, abbrev: str):
-    """Calculates precision match score between user query and team identifiers."""
     q = query.lower().strip()
     d_name = d_name.lower().strip()
     s_name = s_name.lower().strip()
     short_d = short_d.lower().strip()
     abbrev = abbrev.lower().strip()
 
-    # Exact matches
     if q in [d_name, short_d, abbrev]:
         return 100
     if q == s_name and q not in GENERIC_STOPWORDS:
         return 92
 
-    # NC State Special Handling
     if any(alias in q for alias in ["nc state", "ncsu", "wolfpack"]):
         if "north carolina state" in d_name or "nc state" in short_d or s_name == "wolfpack":
             return 98
 
-    # Multi-word phrase matches
     if q in d_name:
         return 88
     if short_d in q or (s_name in q and s_name not in GENERIC_STOPWORDS):
         return 82
 
-    # Stopword protection: Single generic words like "state" or "tech" will NOT match
     q_words = [w for w in q.split() if w not in GENERIC_STOPWORDS and len(w) > 2]
     if q_words:
         matches = [w for w in q_words if w in d_name or w in s_name]
@@ -311,7 +306,6 @@ def fetch_live_sports_events(sport_query: str):
     default_teams = ["panthers", "braves", "nc state"]
     active_search = [s.strip().lower() for s in (sport_query or "").split(",") if s.strip()] or default_teams
 
-    # Prioritize pro leagues first for single-word queries, and search full college grids
     leagues = [
         ("football", "nfl", "NFL", "limit=100"),
         ("baseball", "mlb", "MLB", "limit=100"),
@@ -325,7 +319,7 @@ def fetch_live_sports_events(sport_query: str):
         clean_key = re.sub(r'\b(football|baseball|basketball|hockey|soccer|mens|womens|men\'s|women\'s|matchup|game)\b', '', raw_s_key, flags=re.IGNORECASE).strip()
         candidates = []
 
-        # 1. Evaluate all events across leagues and score matches
+        # 1. Query ESPN live scoreboard across leagues
         for sport, league_path, league_tag, q_params in leagues:
             try:
                 espn_url = f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{league_path}/scoreboard?{q_params}"
@@ -357,7 +351,25 @@ def fetch_live_sports_events(sport_query: str):
                                     break
 
                             date_str = ev.get("date", "")
-                            status_str = ev.get("status", {}).get("type", {}).get("detail", "")
+                            status_type = ev.get("status", {}).get("type", {})
+                            status_str = status_type.get("detail", "")
+                            state = status_type.get("state", "")
+
+                            # Extract live / final score
+                            live_game_score = ""
+                            if competitors and len(competitors) >= 2:
+                                away_comp = next((comp_item for comp_item in competitors if comp_item.get("homeAway") == "away"), competitors[0])
+                                home_comp = next((comp_item for comp_item in competitors if comp_item.get("homeAway") == "home"), competitors[1])
+                                
+                                away_abbr = away_comp.get("team", {}).get("abbreviation") or away_comp.get("team", {}).get("shortDisplayName") or "AWAY"
+                                home_abbr = home_comp.get("team", {}).get("abbreviation") or home_comp.get("team", {}).get("shortDisplayName") or "HOME"
+                                
+                                a_score = away_comp.get("score")
+                                h_score = home_comp.get("score")
+                                
+                                if a_score is not None and h_score is not None and str(a_score) != "" and str(h_score) != "" and state in ["in", "post"]:
+                                    live_game_score = f"{away_abbr} {a_score} - {h_score} {home_abbr}"
+
                             try:
                                 dt_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00")).astimezone(ZoneInfo("America/New_York"))
                                 time_formatted = dt_obj.strftime("%A %I:%M %p EDT")
@@ -365,11 +377,12 @@ def fetch_live_sports_events(sport_query: str):
                                 time_formatted = status_str or "Game Time"
 
                             candidates.append({
-                                "score": score,
+                                "score_rank": score,
                                 "matched_team": f"{d_name} ({league_tag})",
                                 "title": ev.get("name", raw_s_key.title()),
                                 "venue": venue_str,
                                 "time": f"{time_formatted} • {status_str}" if status_str and status_str != time_formatted else time_formatted,
+                                "game_score": live_game_score,
                                 "lat": v_lat, "lon": v_lon, "indoor": is_indoor,
                                 "league_tag": league_tag
                             })
@@ -377,13 +390,12 @@ def fetch_live_sports_events(sport_query: str):
             except Exception:
                 continue
 
-        # 2. Pick top candidate and harvest alternative choices for disambiguation
+        # 2. Pick top candidate and harvest alternative choices
         if candidates:
-            candidates.sort(key=lambda x: x["score"], reverse=True)
+            candidates.sort(key=lambda x: x["score_rank"], reverse=True)
             top = candidates[0]
             cond_str = fetch_stadium_live_weather(top["lat"], top["lon"], top["indoor"])
 
-            # Collect distinct alternative options if multiple teams matched (e.g. Carolina vs Georgia State Panthers)
             alternatives = []
             seen_alts = {top["matched_team"]}
             for cand in candidates[1:]:
@@ -397,6 +409,7 @@ def fetch_live_sports_events(sport_query: str):
                 "title": top["title"],
                 "venue": top["venue"],
                 "time": top["time"],
+                "score": top.get("game_score", ""),
                 "conditions": cond_str,
                 "alternatives": alternatives
             })
@@ -410,6 +423,7 @@ def fetch_live_sports_events(sport_query: str):
                         "title": val["name"],
                         "venue": val["venue"],
                         "time": "Scheduled Game Day Fixture",
+                        "score": "",
                         "conditions": cond_str,
                         "alternatives": []
                     })
@@ -421,6 +435,7 @@ def fetch_live_sports_events(sport_query: str):
                     "title": f"{raw_s_key.title()} (Matchup)",
                     "venue": "Home Stadium & Arena",
                     "time": "Upcoming Match Fixture",
+                    "score": "",
                     "conditions": "72°F, Fair, Wind 5 mph",
                     "alternatives": []
                 })
@@ -833,7 +848,7 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
         "lifestyle": {
             "clothing": {
                 "morning": f"🌅 Morning ({tonight_low}°F): Crisp start. Light fleece, sweater, or layered hoodie suggested.",
-                "afternoon": f"☀️️ Afternoon ({today_high}°F): Mild sun. Comfortable breathable cottons, light long sleeves, or casual chinos.",
+                "afternoon": f"☀ Afternoon ({today_high}°F): Mild sun. Comfortable breathable cottons, light long sleeves, or casual chinos.",
                 "night": f"🌙 Night ({tonight_low}°F): Cool drop. Medium layer or light windbreaker for evening outdoor events."
             },
             "hair_makeup": {

@@ -330,16 +330,32 @@ async def main(page: ft.Page):
                     ft.Divider(height=6, color="grey800")
                 ]
                 for ev in val:
+                    # Right side status + score controls
+                    status_controls = []
+                    game_score = ev.get("score", "")
+                    if game_score:
+                        status_controls.append(
+                            ft.Container(
+                                content=ft.Text(f"📊 {game_score}", size=11, weight=ft.FontWeight.BOLD, color="black"),
+                                bgcolor="amber400",
+                                border_radius=6,
+                                padding=ft.Padding(7, 3, 7, 3)
+                            )
+                        )
+                    status_controls.append(
+                        ft.Text(f"⏰ {ev.get('time', '')}", size=12, color="cyan200", weight=ft.FontWeight.W_600)
+                    )
+
                     card_content = [
                         ft.Row([
                             ft.Text(ev.get("title", "Matchup"), size=14, weight=ft.FontWeight.BOLD, color="amber200", expand=True),
-                            ft.Text(f"⏰ {ev.get('time', '')}", size=12, color="cyan200", weight=ft.FontWeight.W_600)
+                            ft.Row(status_controls, spacing=8, alignment=ft.MainAxisAlignment.END, vertical_alignment=ft.CrossAxisAlignment.CENTER)
                         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         ft.Text(f"📍 {ev.get('venue', '')}", size=12, color="grey300"),
                         ft.Text(f"🌤️ {ev.get('conditions', '')}", size=12, color="green200", weight=ft.FontWeight.W_500),
                     ]
 
-                    # Disambiguation selection chips built with standard Container controls
+                    # Disambiguation selection chips
                     alts = ev.get("alternatives", [])
                     if alts:
                         alt_row = ft.Row([ft.Text("Did you mean: ", size=11, color="grey400", weight=ft.FontWeight.W_600)], wrap=True, spacing=6)
