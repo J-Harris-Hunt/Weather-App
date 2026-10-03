@@ -55,8 +55,8 @@ async def main(page: ft.Page):
     )
 
     sports_input = ft.TextField(
-        label="Enter Teams (e.g. Panthers, Braves, Wolfpack)",
-        value="Panthers, Braves",
+        label="Enter Teams (e.g. Panthers, Braves, NC State)",
+        value="Panthers, Braves, NC State",
         expand=True,
         border_color="amber300",
         focused_border_color="amber200",
@@ -92,7 +92,7 @@ async def main(page: ft.Page):
     current_precip_text = ft.Text("Precip Now: 0% | Next 24h Max: 0%", size=14, color="cyan300", weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
     rain_duration_text = ft.Text("Zero precipitation expected.", size=13, color="amber100", text_align=ft.TextAlign.CENTER)
 
-    # Interactive Live Doppler Radar Section with Clean Geography (lm=0)
+    # Interactive Live Doppler Radar Section
     radar_timestamp_text = ft.Text("🟢 Live Radar Scan • Synced", size=11, color="green300", weight=ft.FontWeight.W_600)
 
     radar_button_widget = ft.Container(
@@ -147,6 +147,75 @@ async def main(page: ft.Page):
         detail_dialog.open = False
         page.update()
 
+    # Team Picker Dialog
+    async def add_team_from_picker(team_name):
+        current_val = sports_input.value.strip()
+        teams = [t.strip() for t in current_val.split(",") if t.strip()]
+        if team_name not in teams:
+            teams.append(team_name)
+        sports_input.value = ", ".join(teams)
+        team_picker_dialog.open = False
+        page.update()
+        await load_weather()
+
+    async def select_alt_team(alt_query):
+        current_val = sports_input.value.strip()
+        # Replace the first ambiguous match or append
+        teams = [t.strip() for t in current_val.split(",") if t.strip()]
+        replaced = False
+        for idx, t in enumerate(teams):
+            if t.lower() in alt_query.lower() or alt_query.lower() in t.lower():
+                teams[idx] = alt_query
+                replaced = True
+                break
+        if not replaced:
+            teams.append(alt_query)
+        sports_input.value = ", ".join(teams)
+        page.update()
+        await load_weather()
+
+    popular_teams_data = [
+        ("🏈 NFL", ["Carolina Panthers", "Dallas Cowboys", "Kansas City Chiefs", "Philadelphia Eagles"]),
+        ("🎓 NCAA College", ["NC State", "UNC Tar Heels", "Duke Blue Devils", "Clemson", "Georgia Bulldogs"]),
+        ("⚾ MLB", ["Atlanta Braves", "New York Yankees", "Los Angeles Dodgers", "Boston Red Sox"]),
+        ("🏒 NHL & 🏀 NBA", ["Carolina Hurricanes", "Charlotte Hornets"]),
+    ]
+
+    team_picker_column = ft.Column([], spacing=10, scroll=ft.ScrollMode.ADAPTIVE)
+    for cat_title, t_list in popular_teams_data:
+        chips_row = ft.Row(wrap=True, spacing=6)
+        for t_name in t_list:
+            chips_row.controls.append(
+                ft.ActionChip(
+                    label=ft.Text(t_name, size=11, color="white"),
+                    bgcolor="#1c1f26",
+                    on_click=lambda e, name=t_name: page.run_task(add_team_from_picker, name)
+                )
+            )
+        team_picker_column.controls.append(
+            ft.Column([
+                ft.Text(cat_title, size=13, weight=ft.FontWeight.BOLD, color="amber300"),
+                chips_row
+            ], spacing=4)
+        )
+
+    team_picker_dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("Quick Team Selector", size=16, weight=ft.FontWeight.BOLD, color="amber300"),
+        content=ft.Container(width=340, height=360, content=team_picker_column),
+        actions=[ft.TextButton("Done", on_click=lambda e: close_team_picker(e))],
+        actions_alignment=ft.MainAxisAlignment.END,
+    )
+    page.overlay.append(team_picker_dialog)
+
+    def open_team_picker(e):
+        team_picker_dialog.open = True
+        page.update()
+
+    def close_team_picker(e):
+        team_picker_dialog.open = False
+        page.update()
+
     def show_day_details(day_info):
         detail_dialog.title = ft.Text(day_info.get("date", "Day Forecast"), size=16, weight=ft.FontWeight.BOLD, color="amber300")
         detail_dialog.content = ft.Container(
@@ -185,8 +254,9 @@ async def main(page: ft.Page):
             search_box = ft.Container(
                 content=ft.Row([
                     sports_input,
-                    ft.IconButton(icon=ft.Icons.SEARCH, on_click=load_weather, icon_color="amber300", tooltip="Search Team Weather")
-                ], spacing=10),
+                    ft.IconButton(icon=ft.Icons.SEARCH, on_click=load_weather, icon_color="amber300", tooltip="Search Teams"),
+                    ft.IconButton(icon=ft.Icons.TUNE, on_click=open_team_picker, icon_color="cyan300", tooltip="Choose from Team List")
+                ], spacing=6),
                 bgcolor="#1c1f26", padding=10, border_radius=8
             )
             cards.append(search_box)
@@ -257,16 +327,34 @@ async def main(page: ft.Page):
                     ft.Divider(height=6, color="grey800")
                 ]
                 for ev in val:
+                    card_content = [
+                        ft.Row([
+                            ft.Text(ev.get("title", "Matchup"), size=14, weight=ft.FontWeight.BOLD, color="amber200", expand=True),
+                            ft.Text(f"⏰ {ev.get('time', '')}", size=12, color="cyan200", weight=ft.FontWeight.W_600)
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Text(f"📍 {ev.get('venue', '')}", size=12, color="grey300"),
+                        ft.Text(f"🌤️ {ev.get('conditions', '')}", size=12, color="green200", weight=ft.FontWeight.W_500),
+                    ]
+
+                    # Disambiguation alternative choice chips
+                    alts = ev.get("alternatives", [])
+                    if alts:
+                        alt_row = ft.Row([ft.Text("Did you mean: ", size=11, color="grey400", weight=ft.FontWeight.W_600)], wrap=True, spacing=6)
+                        for alt_item in alts:
+                            alt_name = alt_item.get("name", "")
+                            alt_q = alt_item.get("query", "")
+                            alt_row.controls.append(
+                                ft.ActionChip(
+                                    label=ft.Text(alt_name, size=10, color="cyan200"),
+                                    bgcolor="#16222f",
+                                    on_click=lambda e, q=alt_q: page.run_task(select_alt_team, q)
+                                )
+                            )
+                        card_content.append(ft.Container(content=alt_row, padding=ft.Padding(0, 4, 0, 0)))
+
                     event_cards.append(
                         ft.Container(
-                            content=ft.Column([
-                                ft.Row([
-                                    ft.Text(ev.get("title", "Matchup"), size=14, weight=ft.FontWeight.BOLD, color="amber200", expand=True),
-                                    ft.Text(f"⏰ {ev.get('time', '')}", size=12, color="cyan200", weight=ft.FontWeight.W_600)
-                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                                ft.Text(f"📍 {ev.get('venue', '')}", size=12, color="grey300"),
-                                ft.Text(f"🌤️ {ev.get('conditions', '')}", size=12, color="green200", weight=ft.FontWeight.W_500),
-                            ], spacing=4),
+                            content=ft.Column(card_content, spacing=4),
                             bgcolor="#1c1f26", padding=10, border_radius=6
                         )
                     )
@@ -391,9 +479,8 @@ async def main(page: ft.Page):
 
     async def load_weather(e=None):
         loc = location_input.value.strip() or "28412"
-        teams = sports_input.value.strip() or "Panthers, Braves"
+        teams = sports_input.value.strip() or "Panthers, Braves, NC State"
 
-        # Persist preferences to browser client storage
         try:
             await page.client_storage.set_async("tmw_saved_location", loc)
             await page.client_storage.set_async("tmw_saved_teams", teams)

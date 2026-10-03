@@ -28,36 +28,40 @@ LOCAL_MICROCLIMATES = {
 }
 
 TEAM_STADIUM_MAP = {
-    # NC & Regional College
-    "wolfpack": {"name": "NC State Wolfpack (NCAA)", "venue": "Carter-Finley Stadium (Raleigh, NC)", "lat": 35.7954, "lon": -78.7103, "indoor": False},
+    # Regional College
     "nc state": {"name": "NC State Wolfpack (NCAA)", "venue": "Carter-Finley Stadium (Raleigh, NC)", "lat": 35.7954, "lon": -78.7103, "indoor": False},
-    "tar heels": {"name": "UNC Tar Heels (NCAA)", "venue": "Kenan Memorial Stadium (Chapel Hill, NC)", "lat": 35.9070, "lon": -79.0479, "indoor": False},
+    "wolfpack": {"name": "NC State Wolfpack (NCAA)", "venue": "Carter-Finley Stadium (Raleigh, NC)", "lat": 35.7954, "lon": -78.7103, "indoor": False},
     "unc": {"name": "UNC Tar Heels (NCAA)", "venue": "Kenan Memorial Stadium (Chapel Hill, NC)", "lat": 35.9070, "lon": -79.0479, "indoor": False},
+    "tar heels": {"name": "UNC Tar Heels (NCAA)", "venue": "Kenan Memorial Stadium (Chapel Hill, NC)", "lat": 35.9070, "lon": -79.0479, "indoor": False},
     "duke": {"name": "Duke Blue Devils (NCAA)", "venue": "Wallace Wade Stadium (Durham, NC)", "lat": 35.9953, "lon": -78.9418, "indoor": False},
     "wake forest": {"name": "Wake Forest Demon Deacons (NCAA)", "venue": "Allegacy Stadium (Winston-Salem, NC)", "lat": 36.1306, "lon": -80.2547, "indoor": False},
     "ecu": {"name": "ECU Pirates (NCAA)", "venue": "Dowdy-Ficklen Stadium (Greenville, NC)", "lat": 35.5964, "lon": -77.3653, "indoor": False},
     "app state": {"name": "App State Mountaineers (NCAA)", "venue": "Kidd Brewer Stadium (Boone, NC)", "lat": 36.2114, "lon": -81.6853, "indoor": False},
     "clemson": {"name": "Clemson Tigers (NCAA)", "venue": "Memorial Stadium (Clemson, SC)", "lat": 34.6788, "lon": -82.8432, "indoor": False},
     "georgia": {"name": "Georgia Bulldogs (NCAA)", "venue": "Sanford Stadium (Athens, GA)", "lat": 33.9498, "lon": -83.3734, "indoor": False},
-    "alabama": {"name": "Alabama Crimson Tide (NCAA)", "venue": "Bryant-Denny Stadium (Tuscaloosa, AL)", "lat": 33.2078, "lon": -87.5504, "indoor": False},
     "tennessee": {"name": "Tennessee Volunteers (NCAA)", "venue": "Neyland Stadium (Knoxville, TN)", "lat": 35.9550, "lon": -83.9250, "indoor": False},
-    "louisville": {"name": "Louisville Cardinals (NCAA)", "venue": "L&N Stadium (Louisville, KY)", "lat": 38.2058, "lon": -85.7588, "indoor": False},
-    
-    # Pro Teams
+
+    # Pro Franchises
     "panthers": {"name": "Carolina Panthers (NFL)", "venue": "Bank of America Stadium (Charlotte, NC)", "lat": 35.2258, "lon": -80.8528, "indoor": False},
+    "carolina panthers": {"name": "Carolina Panthers (NFL)", "venue": "Bank of America Stadium (Charlotte, NC)", "lat": 35.2258, "lon": -80.8528, "indoor": False},
+    "georgia state panthers": {"name": "Georgia State Panthers (NCAA)", "venue": "Center Parc Stadium (Atlanta, GA)", "lat": 33.7353, "lon": -84.3894, "indoor": False},
     "braves": {"name": "Atlanta Braves (MLB)", "venue": "Truist Park (Atlanta, GA)", "lat": 33.8908, "lon": -84.4678, "indoor": False},
     "hurricanes": {"name": "Carolina Hurricanes (NHL)", "venue": "Lenovo Center (Raleigh, NC)", "lat": 35.8033, "lon": -78.7218, "indoor": True},
+    "hornets": {"name": "Charlotte Hornets (NBA)", "venue": "Spectrum Center (Charlotte, NC)", "lat": 35.2251, "lon": -80.8392, "indoor": True},
     "chiefs": {"name": "Kansas City Chiefs (NFL)", "venue": "Arrowhead Stadium (Kansas City, MO)", "lat": 39.0489, "lon": -94.4839, "indoor": False},
     "cowboys": {"name": "Dallas Cowboys (NFL)", "venue": "AT&T Stadium (Arlington, TX)", "lat": 32.7473, "lon": -97.0945, "indoor": True},
     "eagles": {"name": "Philadelphia Eagles (NFL)", "venue": "Lincoln Financial Field (Philadelphia, PA)", "lat": 39.9008, "lon": -75.1675, "indoor": False},
     "broncos": {"name": "Denver Broncos (NFL)", "venue": "Empower Field at Mile High (Denver, CO)", "lat": 39.7439, "lon": -105.0201, "indoor": False},
-    "packers": {"name": "Green Bay Packers (NFL)", "venue": "Lambeau Field (Green Bay, WI)", "lat": 44.5013, "lon": -88.0622, "indoor": False},
-    "bills": {"name": "Buffalo Bills (NFL)", "venue": "Highmark Stadium (Orchard Park, NY)", "lat": 42.7738, "lon": -78.7870, "indoor": False},
-    "ravens": {"name": "Baltimore Ravens (NFL)", "venue": "M&T Bank Stadium (Baltimore, MD)", "lat": 39.2780, "lon": -76.6227, "indoor": False},
-    "steelers": {"name": "Pittsburgh Steelers (NFL)", "venue": "Acrisure Stadium (Pittsburgh, PA)", "lat": 40.4468, "lon": -80.0158, "indoor": False},
+    "dodgers": {"name": "Los Angeles Dodgers (MLB)", "venue": "Dodger Stadium (Los Angeles, CA)", "lat": 34.0739, "lon": -118.2400, "indoor": False},
     "yankees": {"name": "New York Yankees (MLB)", "venue": "Yankee Stadium (Bronx, NY)", "lat": 40.8296, "lon": -73.9262, "indoor": False},
     "red sox": {"name": "Boston Red Sox (MLB)", "venue": "Fenway Park (Boston, MA)", "lat": 42.3467, "lon": -71.0972, "indoor": False},
-    "dodgers": {"name": "Los Angeles Dodgers (MLB)", "venue": "Dodger Stadium (Los Angeles, CA)", "lat": 34.0739, "lon": -118.2400, "indoor": False},
+}
+
+GENERIC_STOPWORDS = {
+    "state", "university", "tech", "college", "city", "north", "south",
+    "east", "west", "central", "eastern", "western", "southern", "northern",
+    "blue", "red", "golden", "green", "black", "white", "st", "saint",
+    "football", "baseball", "basketball", "hockey", "mens", "womens", "the"
 }
 
 WMO_CODE_MAP = {
@@ -266,136 +270,159 @@ def fetch_stadium_live_weather(lat: float, lon: float, is_indoor: bool = False):
     except Exception:
         return "72°F, Fair, Wind 5 mph"
 
+def calculate_team_match_score(query: str, d_name: str, s_name: str, short_d: str, abbrev: str):
+    """Calculates precision match score between user query and team identifiers."""
+    q = query.lower().strip()
+    d_name = d_name.lower().strip()
+    s_name = s_name.lower().strip()
+    short_d = short_d.lower().strip()
+    abbrev = abbrev.lower().strip()
+
+    # Exact matches
+    if q in [d_name, short_d, abbrev]:
+        return 100
+    if q == s_name and q not in GENERIC_STOPWORDS:
+        return 92
+
+    # NC State Special Handling
+    if any(alias in q for alias in ["nc state", "ncsu", "wolfpack"]):
+        if "north carolina state" in d_name or "nc state" in short_d or s_name == "wolfpack":
+            return 98
+
+    # Multi-word phrase matches
+    if q in d_name:
+        return 88
+    if short_d in q or (s_name in q and s_name not in GENERIC_STOPWORDS):
+        return 82
+
+    # Stopword protection: Single generic words like "state" or "tech" will NOT match
+    q_words = [w for w in q.split() if w not in GENERIC_STOPWORDS and len(w) > 2]
+    if q_words:
+        matches = [w for w in q_words if w in d_name or w in s_name]
+        if len(matches) == len(q_words):
+            return 80
+        if len(matches) > 0 and len(q_words) == 1 and matches[0] in [s_name, short_d]:
+            return 75
+
+    return 0
+
 def fetch_live_sports_events(sport_query: str):
     events = []
-    default_teams = ["panthers", "braves"]
+    default_teams = ["panthers", "braves", "nc state"]
     active_search = [s.strip().lower() for s in (sport_query or "").split(",") if s.strip()] or default_teams
-    
-    # Complete endpoints with groups=80 & limit=100 so all FBS & Pro games load
+
+    # Prioritize pro leagues first for single-word queries, and search full college grids
     leagues = [
-        ("football", "college-football", "groups=80&limit=100"),
-        ("football", "nfl", "limit=100"),
-        ("baseball", "mlb", "limit=100"),
-        ("hockey", "nhl", "limit=100"),
-        ("basketball", "nba", "limit=100"),
+        ("football", "nfl", "NFL", "limit=100"),
+        ("baseball", "mlb", "MLB", "limit=100"),
+        ("football", "college-football", "NCAA", "groups=80&limit=100"),
+        ("hockey", "nhl", "NHL", "limit=100"),
+        ("basketball", "nba", "NBA", "limit=100"),
     ]
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
     for raw_s_key in active_search:
-        event_found = False
-        
-        # Clean sport noise words so 'nc state wolfpack football' becomes 'nc state wolfpack'
-        clean_key = re.sub(r'\b(football|baseball|basketball|hockey|soccer|mens|womens|men\'s|women\'s|team|club|matchup|game)\b', '', raw_s_key, flags=re.IGNORECASE).strip()
-        tokens = [t for t in clean_key.split() if len(t) > 2]
+        clean_key = re.sub(r'\b(football|baseball|basketball|hockey|soccer|mens|womens|men\'s|women\'s|matchup|game)\b', '', raw_s_key, flags=re.IGNORECASE).strip()
+        candidates = []
 
-        # 1. Query ESPN live scoreboard across leagues
-        for sport, league, query_params in leagues:
+        # 1. Evaluate all events across leagues and score matches
+        for sport, league_path, league_tag, q_params in leagues:
             try:
-                espn_url = f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{league}/scoreboard?{query_params}"
+                espn_url = f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{league_path}/scoreboard?{q_params}"
                 r = requests.get(espn_url, headers=headers, timeout=3.0).json()
                 for ev in r.get("events", []):
-                    ev_name = ev.get("name", "").lower()
-                    ev_short = ev.get("shortName", "").lower()
                     comp = ev.get("competitions", [{}])[0]
                     competitors = comp.get("competitors", [])
 
-                    # Check competitors display names and nicknames
-                    team_match = False
-                    if clean_key and (clean_key in ev_name or clean_key in ev_short):
-                        team_match = True
-                    elif tokens and any(t in ev_name or t in ev_short for t in tokens):
-                        team_match = True
-                    else:
-                        for c in competitors:
-                            t_info = c.get("team", {})
-                            d_name = t_info.get("displayName", "").lower()
-                            s_name = t_info.get("name", "").lower()
-                            abbrev = t_info.get("abbreviation", "").lower()
-                            if clean_key and (clean_key in d_name or clean_key in s_name or clean_key == abbrev):
-                                team_match = True
-                                break
-                            if tokens and any(t in d_name or t in s_name for t in tokens):
-                                team_match = True
-                                break
+                    for c in competitors:
+                        t_info = c.get("team", {})
+                        d_name = t_info.get("displayName", "")
+                        s_name = t_info.get("name", "")
+                        short_d = t_info.get("shortDisplayName", "")
+                        abbrev = t_info.get("abbreviation", "")
 
-                    if team_match:
-                        date_str = ev.get("date", "")
-                        status_str = ev.get("status", {}).get("type", {}).get("detail", "")
-                        venue = comp.get("venue", {})
-                        v_name = venue.get("fullName", "Stadium")
-                        city = venue.get("address", {}).get("city", "")
-                        state = venue.get("address", {}).get("state", "")
-                        venue_str = f"{v_name} ({city}, {state})" if city else v_name
-                        is_indoor = venue.get("indoor", False)
+                        score = calculate_team_match_score(clean_key or raw_s_key, d_name, s_name, short_d, abbrev)
+                        if score >= 70:
+                            venue = comp.get("venue", {})
+                            v_name = venue.get("fullName", "Stadium")
+                            city = venue.get("address", {}).get("city", "")
+                            state = venue.get("address", {}).get("state", "")
+                            venue_str = f"{v_name} ({city}, {state})" if city else v_name
+                            is_indoor = venue.get("indoor", False)
 
-                        # Match stadium coordinates for live weather
-                        v_lat, v_lon = 35.7954, -78.7103
-                        for k, v in TEAM_STADIUM_MAP.items():
-                            if k in ev_name or k in clean_key:
-                                v_lat, v_lon, is_indoor = v["lat"], v["lon"], v.get("indoor", False)
-                                break
+                            v_lat, v_lon = 35.7954, -78.7103
+                            for k, val in TEAM_STADIUM_MAP.items():
+                                if k in d_name.lower() or k in clean_key:
+                                    v_lat, v_lon, is_indoor = val["lat"], val["lon"], val.get("indoor", False)
+                                    break
 
-                        try:
-                            dt_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00")).astimezone(ZoneInfo("America/New_York"))
-                            time_formatted = dt_obj.strftime("%A %I:%M %p EDT")
-                        except Exception:
-                            time_formatted = status_str or "Game Time"
+                            date_str = ev.get("date", "")
+                            status_str = ev.get("status", {}).get("type", {}).get("detail", "")
+                            try:
+                                dt_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00")).astimezone(ZoneInfo("America/New_York"))
+                                time_formatted = dt_obj.strftime("%A %I:%M %p EDT")
+                            except Exception:
+                                time_formatted = status_str or "Game Time"
 
-                        cond_str = fetch_stadium_live_weather(v_lat, v_lon, is_indoor)
-                        events.append({
-                            "title": ev.get("name", raw_s_key.title()),
-                            "venue": venue_str,
-                            "time": f"{time_formatted} • {status_str}" if status_str and status_str != time_formatted else time_formatted,
-                            "conditions": cond_str
-                        })
-                        event_found = True
-                        break
-                if event_found:
-                    break
+                            candidates.append({
+                                "score": score,
+                                "matched_team": f"{d_name} ({league_tag})",
+                                "title": ev.get("name", raw_s_key.title()),
+                                "venue": venue_str,
+                                "time": f"{time_formatted} • {status_str}" if status_str and status_str != time_formatted else time_formatted,
+                                "lat": v_lat, "lon": v_lon, "indoor": is_indoor,
+                                "league_tag": league_tag
+                            })
+                            break
             except Exception:
                 continue
 
-        # 2. Resilient bidirectional fallback to TEAM_STADIUM_MAP
-        if not event_found:
-            matched_known = False
-            for k, v in TEAM_STADIUM_MAP.items():
-                if k in raw_s_key or k in clean_key or clean_key in k or any(t == k for t in tokens):
-                    cond_str = fetch_stadium_live_weather(v["lat"], v["lon"], v.get("indoor", False))
-                    events.append({
-                        "title": v["name"],
-                        "venue": v["venue"],
-                        "time": "No Game Active Today • Scheduled Fixture",
-                        "conditions": cond_str
-                    })
-                    matched_known = True
-                    break
-            
-            # 3. Dynamic Geocoding fallback (never show static 'Regional Sports Complex')
-            if not matched_known and raw_s_key:
-                try:
-                    geo_r = requests.get(f"https://geocoding-api.open-meteo.com/v1/search?name={clean_key or raw_s_key}&count=1&country=US&language=en&format=json", timeout=3).json()
-                    res_list = geo_r.get("results", [])
-                    if res_list:
-                        g = res_list[0]
-                        g_lat, g_lon = float(g["latitude"]), float(g["longitude"])
-                        loc_name = f"{g.get('name')}, {g.get('admin1', '')}"
-                        cond_str = fetch_stadium_live_weather(g_lat, g_lon, False)
-                        events.append({
-                            "title": f"{raw_s_key.title()} (Matchup)",
-                            "venue": f"Home Venue / Arena ({loc_name})",
-                            "time": "Upcoming Match Fixture",
-                            "conditions": cond_str
-                        })
-                        matched_known = True
-                except Exception:
-                    pass
+        # 2. Pick top candidate and harvest alternative choices for disambiguation
+        if candidates:
+            candidates.sort(key=lambda x: x["score"], reverse=True)
+            top = candidates[0]
+            cond_str = fetch_stadium_live_weather(top["lat"], top["lon"], top["indoor"])
 
-            if not matched_known and raw_s_key:
+            # Collect distinct alternative options if multiple teams matched (e.g. Carolina vs Georgia State Panthers)
+            alternatives = []
+            seen_alts = {top["matched_team"]}
+            for cand in candidates[1:]:
+                alt_name = cand["matched_team"]
+                if alt_name not in seen_alts and len(alternatives) < 3:
+                    seen_alts.add(alt_name)
+                    clean_alt_query = cand["matched_team"].split("(")[0].strip()
+                    alternatives.append({"name": alt_name, "query": clean_alt_query})
+
+            events.append({
+                "title": top["title"],
+                "venue": top["venue"],
+                "time": top["time"],
+                "conditions": cond_str,
+                "alternatives": alternatives
+            })
+        else:
+            # 3. Known Stadium Map Fallback
+            matched_fallback = False
+            for k, val in TEAM_STADIUM_MAP.items():
+                if k in clean_key or clean_key in k:
+                    cond_str = fetch_stadium_live_weather(val["lat"], val["lon"], val.get("indoor", False))
+                    events.append({
+                        "title": val["name"],
+                        "venue": val["venue"],
+                        "time": "Scheduled Game Day Fixture",
+                        "conditions": cond_str,
+                        "alternatives": []
+                    })
+                    matched_fallback = True
+                    break
+
+            if not matched_fallback and raw_s_key:
                 events.append({
                     "title": f"{raw_s_key.title()} (Matchup)",
                     "venue": "Home Stadium & Arena",
                     "time": "Upcoming Match Fixture",
-                    "conditions": "72°F, Fair, Wind 5 mph"
+                    "conditions": "72°F, Fair, Wind 5 mph",
+                    "alternatives": []
                 })
 
     return events
@@ -642,7 +669,7 @@ def calculate_6hr_forecast_metrics(curr_temp, curr_wind, hourly_36):
     trend_note = f"6-Hour Outlook: Expected ~{avg_temp}°F, winds ~{avg_wind} mph, max rain risk {max_rain}%"
     return avg_temp, avg_wind, max_rain, trend_note
 
-def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Braves"):
+def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Braves, NC State"):
     lat, lon, elev_ft, location_name = get_coordinates(query)
     local_tz = get_timezone_for_coordinates(lon)
     now = datetime.now(local_tz)
@@ -806,7 +833,7 @@ def get_full_weather_data(query: str = "28412", sport_team: str = "Panthers, Bra
         "lifestyle": {
             "clothing": {
                 "morning": f"🌅 Morning ({tonight_low}°F): Crisp start. Light fleece, sweater, or layered hoodie suggested.",
-                "afternoon": f"☀️ Afternoon ({today_high}°F): Mild sun. Comfortable breathable cottons, light long sleeves, or casual chinos.",
+                "afternoon": f"☀️️ Afternoon ({today_high}°F): Mild sun. Comfortable breathable cottons, light long sleeves, or casual chinos.",
                 "night": f"🌙 Night ({tonight_low}°F): Cool drop. Medium layer or light windbreaker for evening outdoor events."
             },
             "hair_makeup": {
@@ -850,7 +877,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Thick Moose Weather API", lifespan=lifespan)
 
 @app.get("/weather")
-def api_weather(query: str = "28412", sport_team: str = "Panthers, Braves"):
+def api_weather(query: str = "28412", sport_team: str = "Panthers, Braves, NC State"):
     try:
         return get_full_weather_data(query, sport_team)
     except Exception as e:
