@@ -940,16 +940,16 @@ def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC St
             "clothing": {
                 "morning": f"🌅 Morning ({tonight_low}°F): Crisp start. Light fleece, sweater, or layered hoodie suggested.",
                 "afternoon": f"☀ Afternoon ({today_high}°F): Mild sun. Comfortable breathable cottons, light long sleeves, or casual chinos.",
-                "night": f"🌙 Night ({tonight_low}°F): Cool drop. Medium layer or light windbreaker for evening outdoor events."
+                "night": f"🌙 Night ({tonight_low}°F): Cool drop. Medium layer or light windbreaker for evening outdoor events.",
             },
             "hair_makeup": {
                 "hair": f"💇 Frizz Index: {'Elevated' if curr_hum > 75 else 'Moderate'} ({curr_hum}% RH / Dew point {dew_point}°F). {'Silicone anti-humidity serum or sleek styles recommended.' if curr_hum > 75 else 'Standard hold styling product will maintain integrity.'}",
-                "makeup": f"💄 Makeup Finish (Dew point {dew_point}°F): {'High atmospheric moisture—oil-controlling matte primer recommended.' if curr_hum > 75 else 'Balanced moisture. Standard hydrating foundation holds well.'}"
+                "makeup": f"💄 Makeup Finish (Dew point {dew_point}°F): {'High atmospheric moisture—oil-controlling matte primer recommended.' if curr_hum > 75 else 'Balanced moisture. Standard hydrating foundation holds well.'}",
             },
             "allergen": "🌾 Pollen & Air: Seasonal ragweed and grass counts moderate along open corridors; tree and mold spores low.",
             "mosquito_fly": f"🦟 Insect Activity: {'Active near sheltered vegetation around dusk due to humidity (' + str(curr_hum) + '%).' if curr_hum > 70 and curr_temp >= 60 else 'Low; cooler evening air suppresses insect flight.'}",
             "leaf_change": "🍁 Foliage Status: Deciduous hardwood canopies displaying seasonal transitions. Peak coloration advancing across northern and montane sectors.",
-            "planting_harvest": garden_season
+            "planting_harvest": garden_season,
         },
         "sporting_event": {"events": sports_events},
         "astronomy": {
@@ -964,14 +964,14 @@ def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC St
                 "🪐 Saturn: Visible high in southern sky (Steady amber glow)",
                 "🌟 Jupiter: Brilliant in eastern evening sky",
                 "✨ Venus: Bright evening star in southwestern twilight",
-                "🔴 Mars: Rises in the east after midnight"
+                "🔴 Mars: Rises in the east after midnight",
             ],
             "celestial_events": [
                 {"title": "🛰️ International Space Station (ISS) Pass", "time": "Evening Twilight", "direction": "NW to SE arc", "notes": "Brilliant naked-eye track (-3.0 magnitude)"},
                 {"title": "💫 Moon & Planet Conjunctions", "time": "10:00 PM – Dawn", "direction": "Southern Sky", "notes": "Optimal binocular and small telescope targets"},
-                {"title": "🌌 Deep-Sky Objects", "time": "11:00 PM – Dawn", "direction": "High Northeast", "notes": "Andromeda Galaxy (M31) clear under low light pollution"}
-            ]
-        }
+                {"title": "🌌 Deep-Sky Objects", "time": "11:00 PM – Dawn", "direction": "High Northeast", "notes": "Andromeda Galaxy (M31) clear under low light pollution"},
+            ],
+        },
     }
 
 @asynccontextmanager
@@ -1003,10 +1003,10 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         * {{ box-sizing: border-box; }}
-        body, html {{ margin: 0; padding: 0; height: 100%; width: 100%; background: #0c1219; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; }}
-        #map {{ height: 100%; width: 100%; background: #0c1219; }}
+        body, html {{ margin: 0; padding: 0; height: 100%; width: 100%; background: #1a1a1a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; }}
+        #map {{ height: 100%; width: 100%; background: #1a1a1a; }}
 
-        /* Silky-smooth crossfade GPU transitions on radar tile container */
+        /* Silky-smooth crossfade transitions on radar tile container */
         .leaflet-layer {{
             transition: opacity 0.35s ease-in-out !important;
             will-change: opacity;
@@ -1019,7 +1019,7 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
             z-index: 1000; pointer-events: none;
         }}
         .hud-card {{
-            background: rgba(18, 26, 36, 0.88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            background: rgba(26, 26, 26, 0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
             border: 1px solid rgba(255, 193, 7, 0.4); border-radius: 12px;
             padding: 8px 14px; color: white; display: flex; align-items: center; gap: 10px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.5); pointer-events: auto;
@@ -1042,7 +1042,7 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
         /* Bottom Floating Player Controls */
         .controls {{
             position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
-            background: rgba(18, 26, 36, 0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            background: rgba(26, 26, 26, 0.94); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
             border: 1.5px solid rgba(255, 193, 7, 0.6); border-radius: 18px;
             padding: 10px 18px; display: flex; align-items: center; gap: 12px; z-index: 1000;
             color: white; box-shadow: 0 8px 30px rgba(0,0,0,0.7); max-width: 94vw; width: 520px;
@@ -1109,24 +1109,31 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
         const lon = {lon};
         const labelText = "{label}";
 
-        // Initialize high-contrast dark basemap to make precipitation colors pop cleanly
         const map = L.map('map', {{ zoomControl: false, minZoom: 4, maxZoom: 18 }}).setView([lat, lon], 8);
         L.control.zoom({{ position: 'topright' }}).addTo(map);
 
-        L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
-            attribution: '&copy; OpenStreetMap &copy; CARTO | Doppler: RainViewer',
-            subdomains: 'abcd',
+        // 1. Watermark-free, high-performance Esri Dark Gray Base map
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{{z}}/{{y}}/{{x}}', {{
+            attribution: '&copy; Esri &mdash; Esri, DeLorme, NAVTEQ | Doppler: RainViewer',
+            maxNativeZoom: 16,
             maxZoom: 19
         }}).addTo(map);
 
-        // Pinned location marker with pulsing target reticle
+        // 2. High-contrast transparent label overlay (rendered at zIndex 150 on top of the radar)
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{{z}}/{{y}}/{{x}}', {{
+            maxNativeZoom: 16,
+            maxZoom: 19,
+            zIndex: 150
+        }}).addTo(map);
+
+        // 3. Pinned Location Marker
         const pinIcon = L.divIcon({{
             className: 'custom-pin-container',
             html: '<div class="pulse-pin">📍</div>',
             iconSize: [30, 30],
             iconAnchor: [15, 15]
         }});
-        L.marker([lat, lon], {{ icon: pinIcon }}).addTo(map).bindPopup("<b>📍 " + labelText + "</b>").openPopup();
+        L.marker([lat, lon], {{ icon: pinIcon, zIndexOffset: 1000 }}).addTo(map).bindPopup("<b>📍 " + labelText + "</b>").openPopup();
 
         let frames = [];
         let radarLayers = [];
@@ -1143,7 +1150,6 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
                 const past = (data.radar && data.radar.past) ? data.radar.past : [];
                 let nowcast = (data.radar && data.radar.nowcast) ? data.radar.nowcast : [];
 
-                // Seamlessly project forward 2 hours (12 frames, 10-minute steps)
                 if (past.length > 0) {{
                     const lastFrame = past[past.length - 1];
                     const existingNowcast = nowcast.length;
@@ -1165,7 +1171,6 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
 
                 document.getElementById('slider').max = frames.length - 1;
 
-                // Pre-build all layers with maxNativeZoom: 7 to completely banish zoom errors
                 frames.forEach((f, idx) => {{
                     const layer = L.tileLayer(hostUrl + f.path + '/256/{{z}}/{{x}}/{{y}}/2/1_1.png', {{
                         tileSize: 256,
@@ -1187,10 +1192,8 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
 
         function showFrame(idx) {{
             if (radarLayers.length === 0) return;
-            const oldIdx = currentIndex;
             currentIndex = idx;
 
-            // Crossfade opacities smoothly via CSS transitions
             radarLayers.forEach((l, i) => {{
                 l.setOpacity(i === idx ? 0.82 : 0);
             }});
