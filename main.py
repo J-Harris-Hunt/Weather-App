@@ -37,21 +37,24 @@ async def main(page: ft.Page):
     )
 
     # 2x2 Photorealistic Widget Controls
-    widget_loc_text = ft.Text("Wilmington (28412 / Lords Creek), NC", size=13, weight=ft.FontWeight.W_600, color="amber200")
-    widget_condition_text = ft.Text("Sunny", size=14, color="grey300", weight=ft.FontWeight.W_500)
+    widget_loc_text = ft.Text("No location selected", size=13, weight=ft.FontWeight.W_600, color="amber200")
+    widget_condition_text = ft.Text("Enter location or tap 📍", size=14, color="grey300", weight=ft.FontWeight.W_500)
     widget_hero_icon = ft.Icon(ft.Icons.WB_SUNNY, size=62, color="amber300")
-    widget_temp_text = ft.Text("79°", size=54, weight=ft.FontWeight.BOLD, color="white")
-    widget_hl_text = ft.Text("H: 80°  L: 53°", size=13, weight=ft.FontWeight.BOLD, color="amber100")
-    widget_rain_badge = ft.Text("💧 0% Precip", size=11, color="cyan200", weight=ft.FontWeight.BOLD)
-    widget_uv_badge = ft.Text("☀️ UV 4", size=11, color="orange200", weight=ft.FontWeight.BOLD)
+    widget_temp_text = ft.Text("--°", size=54, weight=ft.FontWeight.BOLD, color="white")
+    widget_hl_text = ft.Text("H: --°  L: --°", size=13, weight=ft.FontWeight.BOLD, color="amber100")
+    widget_rain_badge = ft.Text("💧 --% Precip", size=11, color="cyan200", weight=ft.FontWeight.BOLD)
+    widget_uv_badge = ft.Text("☀️ UV --", size=11, color="orange200", weight=ft.FontWeight.BOLD)
     widget_aqi_badge = ft.Text("🍃 AQI --", size=11, color="green300", weight=ft.FontWeight.BOLD)
 
+    # Location input starts blank for visitors
     location_input = ft.TextField(
-        label="Location (ZIP or City)",
-        value="28412",
-        width=240,
+        label="Location (Address, City, or ZIP)",
+        hint_text="e.g. 100 Main St, Austin, TX or 90210",
+        value="",
+        width=300,
         border_color="amber300",
         focused_border_color="amber200",
+        dense=True
     )
 
     sports_input = ft.TextField(
@@ -63,19 +66,8 @@ async def main(page: ft.Page):
         dense=True
     )
 
-    # Restore persisted preferences from browser storage
-    try:
-        saved_loc = await page.client_storage.get_async("tmw_saved_location")
-        if saved_loc:
-            location_input.value = saved_loc
-        saved_teams = await page.client_storage.get_async("tmw_saved_teams")
-        if saved_teams:
-            sports_input.value = saved_teams
-    except Exception:
-        pass
-
-    location_display_text = ft.Text("📍 Wilmington (28412 / Lords Creek), NC", size=14, color="cyan200", weight=ft.FontWeight.W_600)
-    condition_text = ft.Text("Loading weather data...", size=18, weight=ft.FontWeight.BOLD, color="amber200")
+    location_display_text = ft.Text("📍 Enter address or tap 📍 to auto-detect", size=14, color="cyan200", weight=ft.FontWeight.W_600)
+    condition_text = ft.Text("Ready for location", size=18, weight=ft.FontWeight.BOLD, color="amber200")
     hero_weather_icon = ft.Icon(ft.Icons.WB_SUNNY, size=64, color="amber300")
     curr_temp_text = ft.Text("--°F", size=48, weight=ft.FontWeight.BOLD, color="white")
     feels_like_text = ft.Text("Feels Like: --°F", size=14, color="grey300")
@@ -89,8 +81,8 @@ async def main(page: ft.Page):
     moonrise_text = ft.Text("🌕 Moonrise: --:-- PM", size=13, color="cyan200", weight=ft.FontWeight.W_600)
     moonset_text = ft.Text("🌑 Moonset: --:-- AM", size=13, color="cyan200", weight=ft.FontWeight.W_600)
 
-    current_precip_text = ft.Text("Precip Now: 0% | Next 24h Max: 0%", size=14, color="cyan300", weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
-    rain_duration_text = ft.Text("Zero precipitation expected.", size=13, color="amber100", text_align=ft.TextAlign.CENTER)
+    current_precip_text = ft.Text("Precip Now: --% | Next 24h Max: --%", size=14, color="cyan300", weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
+    rain_duration_text = ft.Text("Awaiting location input.", size=13, color="amber100", text_align=ft.TextAlign.CENTER)
 
     # Interactive Live Doppler Radar Section
     radar_timestamp_text = ft.Text("🟢 Live Radar Scan • Synced", size=11, color="green300", weight=ft.FontWeight.W_600)
@@ -104,7 +96,7 @@ async def main(page: ft.Page):
         border_radius=10,
         padding=ft.Padding(16, 10, 16, 10),
         ink=True,
-        url="https://www.rainviewer.com/map.html?loc=34.1378,-77.9150,8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=0&layer=radar&sm=1&sn=1",
+        url="https://www.rainviewer.com/map.html?loc=38.8951,-77.0364,8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=0&layer=radar&sm=1&sn=1",
     )
 
     radar_container = ft.Container(
@@ -156,7 +148,8 @@ async def main(page: ft.Page):
         sports_input.value = ", ".join(teams)
         team_picker_dialog.open = False
         page.update()
-        await load_weather()
+        if location_input.value.strip():
+            await load_weather()
 
     async def select_alt_team(alt_query):
         current_val = sports_input.value.strip()
@@ -171,7 +164,8 @@ async def main(page: ft.Page):
             teams.append(alt_query)
         sports_input.value = ", ".join(teams)
         page.update()
-        await load_weather()
+        if location_input.value.strip():
+            await load_weather()
 
     popular_teams_data = [
         ("🏈 NFL", ["Carolina Panthers", "Dallas Cowboys", "Kansas City Chiefs", "Philadelphia Eagles"]),
@@ -265,7 +259,7 @@ async def main(page: ft.Page):
             cards.append(search_box)
 
         if not cat_data or not isinstance(cat_data, dict):
-            cards.append(ft.Text("No data available for this category.", color="grey400", size=13))
+            cards.append(ft.Text("Awaiting location to generate environmental insight.", color="grey400", size=13))
             return cards
 
         for key, val in cat_data.items():
@@ -330,7 +324,6 @@ async def main(page: ft.Page):
                     ft.Divider(height=6, color="grey800")
                 ]
                 for ev in val:
-                    # Right side status + score controls
                     status_controls = []
                     game_score = ev.get("score", "")
                     if game_score:
@@ -355,7 +348,6 @@ async def main(page: ft.Page):
                         ft.Text(f"🌤️ {ev.get('conditions', '')}", size=12, color="green200", weight=ft.FontWeight.W_500),
                     ]
 
-                    # Disambiguation selection chips
                     alts = ev.get("alternatives", [])
                     if alts:
                         alt_row = ft.Row([ft.Text("Did you mean: ", size=11, color="grey400", weight=ft.FontWeight.W_600)], wrap=True, spacing=6)
@@ -494,15 +486,21 @@ async def main(page: ft.Page):
     category_buttons_row = ft.Row(controls=category_chips, spacing=8, scroll=ft.ScrollMode.ADAPTIVE)
 
     async def auto_detect_gps(e):
-        """Instant auto-detection via IP geolocation"""
         import server
-        detected_zip, lat, lon, loc_label = server.auto_detect_location()
-        location_input.value = detected_zip
-        await load_weather()
+        detected_loc, lat, lon, loc_label = server.auto_detect_location()
+        if detected_loc:
+            location_input.value = detected_loc
+            await load_weather()
 
     async def load_weather(e=None):
-        loc = location_input.value.strip() or "28412"
+        loc = location_input.value.strip()
         teams = sports_input.value.strip() or "Panthers, Braves, NC State"
+
+        if not loc:
+            condition_text.value = "Enter address or tap 📍"
+            location_display_text.value = "📍 Please enter your location"
+            page.update()
+            return
 
         try:
             await page.client_storage.set_async("tmw_saved_location", loc)
@@ -764,7 +762,15 @@ async def main(page: ft.Page):
     ], width=750, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
     page.add(full_dashboard)
-    await load_weather()
+
+    # Check for previously saved location; if present, restore and load
+    try:
+        saved_loc = await page.client_storage.get_async("tmw_saved_location")
+        if saved_loc:
+            location_input.value = saved_loc
+            await load_weather()
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     ft.app(target=main, view=ft.AppView.WEB_BROWSER)
