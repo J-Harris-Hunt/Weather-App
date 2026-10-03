@@ -106,7 +106,7 @@ async def main(page: ft.Page):
         border_radius=10,
         padding=ft.Padding(16, 10, 16, 10),
         ink=True,
-        url="https://www.rainviewer.com/map.html?loc=38.8951,-77.0364,8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=0&layer=radar&sm=1&sn=1",
+        url="/radar?lat=38.8951&lon=-77.0364&label=Location",
     )
 
     radar_container = ft.Container(
@@ -115,7 +115,7 @@ async def main(page: ft.Page):
                 ft.Icon(ft.Icons.SATELLITE_ALT, color="cyan300", size=18),
                 ft.Text("Live High-Resolution Doppler Radar", size=14, weight=ft.FontWeight.BOLD, color="amber300"),
             ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
-            ft.Text("Real-time cloud, rain & convective storm tracking", size=11, color="grey400", text_align=ft.TextAlign.CENTER),
+            ft.Text("Past 2 hours + 2 hours predicted radar path with pinned location", size=11, color="grey400", text_align=ft.TextAlign.CENTER),
             radar_timestamp_text,
             ft.Container(height=4),
             radar_button_widget,

@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 import flet as ft
 import flet.fastapi as flet_fastapi
 
@@ -83,7 +83,6 @@ def auto_detect_location(client_ip: str = None):
 
     headers = {"User-Agent": "ThickMooseWeather/2.0 (contact@thickmooselabs.com)"}
 
-    # 1. Primary: ip-api.com
     try:
         url = f"http://ip-api.com/json/{ip_target}" if ip_target else "http://ip-api.com/json/"
         r = requests.get(url, timeout=3.5).json()
@@ -99,7 +98,6 @@ def auto_detect_location(client_ip: str = None):
     except Exception:
         pass
 
-    # 2. Secondary: freeipapi.com
     try:
         url = f"https://freeipapi.com/api/json/{ip_target}" if ip_target else "https://freeipapi.com/api/json"
         r = requests.get(url, headers=headers, timeout=3.5).json()
@@ -115,24 +113,6 @@ def auto_detect_location(client_ip: str = None):
     except Exception:
         pass
 
-    # 3. Tertiary: ipapi.co
-    try:
-        url = f"https://ipapi.co/{ip_target}/json/" if ip_target else "https://ipapi.co/json/"
-        r = requests.get(url, headers=headers, timeout=3.5).json()
-        city = r.get("city", "")
-        region = r.get("region_code", "")
-        postal = r.get("postal", "")
-        lat_val = r.get("latitude")
-        lon_val = r.get("longitude")
-        if lat_val and lon_val:
-            lat = float(lat_val)
-            lon = float(lon_val)
-            loc_label = f"{city}, {region} ({postal})" if postal else f"{city}, {region}"
-            search_query = postal or f"{city}, {region}" or f"{lat:.4f},{lon:.4f}"
-            return search_query, lat, lon, loc_label
-    except Exception:
-        pass
-
     return "28412", 34.1378, -77.9150, "Wilmington, NC (28412)"
 
 def get_coordinates(query: str):
@@ -140,7 +120,6 @@ def get_coordinates(query: str):
     if not clean_q:
         return None, None, None, None
 
-    # 1. Direct Lat/Lon numerical coordinates
     if "," in clean_q:
         parts = [p.strip() for p in clean_q.split(",")]
         try:
@@ -157,7 +136,6 @@ def get_coordinates(query: str):
         except ValueError:
             pass
 
-    # 2. Pure 5-digit ZIP or Canadian postal code
     if clean_q.isdigit() and len(clean_q) == 5:
         try:
             zr = requests.get(f"https://api.zippopotam.us/us/{clean_q}", timeout=3).json()
@@ -178,7 +156,6 @@ def get_coordinates(query: str):
         except Exception:
             pass
 
-    # 3. Analyze tokens for flexible re-ordering (e.g. "NC, Wilmington, 28412" or "Wilmington, NC 28412")
     zip_match = re.search(r'\b\d{5}\b', clean_q)
     extracted_zip = zip_match.group(0) if zip_match else ""
 
@@ -186,7 +163,7 @@ def get_coordinates(query: str):
     detected_state_abbr = ""
     detected_city = ""
 
-    for idx, part in enumerate(parts):
+    for part in parts:
         p_lower = part.lower().strip()
         if p_lower in US_STATES:
             detected_state_abbr = p_lower.upper()
@@ -195,14 +172,12 @@ def get_coordinates(query: str):
         elif not detected_city and not part.isdigit():
             detected_city = part
 
-    # Reconstruct canonical query if mixed order detected
     candidate_queries = [clean_q]
     if detected_city and detected_state_abbr:
         if extracted_zip:
             candidate_queries.insert(0, f"{detected_city}, {detected_state_abbr} {extracted_zip}")
         candidate_queries.append(f"{detected_city}, {detected_state_abbr}")
 
-    # 4. Query Nominatim across candidate variations
     headers = {"User-Agent": "ThickMooseWeather/2.0 (contact@thickmooselabs.com)"}
     for q_try in candidate_queries:
         try:
@@ -250,7 +225,6 @@ def get_coordinates(query: str):
         except Exception:
             pass
 
-    # 5. Fallback via extracted 5-digit ZIP
     if extracted_zip:
         try:
             zr = requests.get(f"https://api.zippopotam.us/us/{extracted_zip}", timeout=3).json()
@@ -271,7 +245,6 @@ def get_coordinates(query: str):
         except Exception:
             pass
 
-    # 6. Fallback via Open-Meteo city name
     city_candidate = detected_city or re.sub(r'[\d,]', '', clean_q).strip()
     if city_candidate:
         try:
@@ -819,7 +792,7 @@ def calculate_6hr_forecast_metrics(curr_temp, curr_wind, hourly_36):
 def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC State"):
     lat, lon, elev_ft, location_name = get_coordinates(query)
     if lat is None or lon is None:
-        raise HTTPException(status_code=404, detail=f"Location not recognized. Please check your city, state, or ZIP code.")
+        raise HTTPException(status_code=404, detail="Location not recognized. Please check your city, state, or ZIP code.")
 
     live_aqi = fetch_live_aqi(lat, lon)
     live, hourly_36, daily_list, sun_times, local_tz = fetch_comprehensive_weather(lat, lon)
@@ -852,7 +825,9 @@ def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC St
     tonight_low = daily_list[0]["low"]
     today_high = daily_list[0]["high"]
 
-    radar_url = f"https://www.rainviewer.com/map.html?loc={round(lat, 4)},{round(lon, 4)},8&oFa=0&oC=1&oU=0&oCS=1&oF=0&oAP=1&c=3&o=83&lm=0&layer=radar&sm=1&sn=1"
+    # In-App Radar View with Exact Parcel Pin & Past+Future Loop
+    encoded_label = urllib.parse.quote(location_name)
+    radar_url = f"/radar?lat={round(lat, 4)}&lon={round(lon, 4)}&label={encoded_label}"
     radar_time_str = now.strftime("%I:%M %p").lstrip("0")
 
     beach_base = 100 - abs(avg_temp_6h - 82) * 2.0 - (avg_wind_6h * 1.5) - rain_penalty
@@ -965,7 +940,7 @@ def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC St
         "lifestyle": {
             "clothing": {
                 "morning": f"🌅 Morning ({tonight_low}°F): Crisp start. Light fleece, sweater, or layered hoodie suggested.",
-                "afternoon": f"☀️ Afternoon ({today_high}°F): Mild sun. Comfortable breathable cottons, light long sleeves, or casual chinos.",
+                "afternoon": f"☀️️ Afternoon ({today_high}°F): Mild sun. Comfortable breathable cottons, light long sleeves, or casual chinos.",
                 "night": f"🌙 Night ({tonight_low}°F): Cool drop. Medium layer or light windbreaker for evening outdoor events."
             },
             "hair_makeup": {
@@ -1016,6 +991,144 @@ def get_manifest():
     if os.path.exists(manifest_path):
         return FileResponse(manifest_path, media_type="application/manifest+json")
     raise HTTPException(status_code=404, detail="Manifest not found")
+
+@app.get("/radar", response_class=HTMLResponse)
+def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Location"):
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thick Moose Radar • {label}</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body, html {{ margin: 0; padding: 0; height: 100%; width: 100%; background: #16202c; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow: hidden; }}
+        #map {{ height: 100%; width: 100%; }}
+        .controls {{
+            position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+            background: rgba(22, 32, 44, 0.94); border: 1.5px solid #ffc107; border-radius: 14px;
+            padding: 10px 18px; display: flex; align-items: center; gap: 12px; z-index: 1000;
+            color: white; box-shadow: 0 4px 20px rgba(0,0,0,0.6); max-width: 90vw;
+        }}
+        .btn {{ background: #ffc107; color: black; border: none; border-radius: 6px; padding: 7px 14px; font-weight: bold; cursor: pointer; font-size: 13px; }}
+        .btn:hover {{ background: #ffe082; }}
+        .badge {{ padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; letter-spacing: 0.5px; }}
+        .badge-past {{ background: rgba(0, 229, 255, 0.2); color: #00e5ff; border: 1px solid #00e5ff; }}
+        .badge-nowcast {{ background: rgba(255, 193, 7, 0.2); color: #ffc107; border: 1px solid #ffc107; }}
+        .time-text {{ font-size: 13px; font-weight: bold; min-width: 76px; text-align: center; }}
+        .timeline {{ width: 140px; cursor: pointer; accent-color: #ffc107; }}
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="controls">
+        <button class="btn" id="playBtn" onclick="togglePlay()">⏸</button>
+        <div id="statusBadge" class="badge badge-past">PAST</div>
+        <div id="timeDisplay" class="time-text">--:--</div>
+        <input type="range" id="slider" class="timeline" min="0" max="0" value="0" oninput="onSlider(this.value)">
+    </div>
+    <script>
+        const lat = {lat};
+        const lon = {lon};
+        const labelText = "{label}";
+
+        const map = L.map('map', {{ zoomControl: true }}).setView([lat, lon], 9);
+        L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
+            attribution: '© OpenStreetMap contributors | Radar by RainViewer',
+            maxZoom: 18
+        }}).addTo(map);
+
+        const pinIcon = L.divIcon({{
+            className: 'custom-pin',
+            html: '<div style="background:#ffc107;color:black;border:2px solid black;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 0 12px rgba(255,193,7,0.9);">📍</div>',
+            iconSize: [26, 26],
+            iconAnchor: [13, 13]
+        }});
+        L.marker([lat, lon], {{ icon: pinIcon }}).addTo(map).bindPopup("<b>📍 " + labelText + "</b>").openPopup();
+
+        let frames = [];
+        let radarLayers = [];
+        let currentIndex = 0;
+        let isPlaying = true;
+        let timer = null;
+        let pastCount = 0;
+
+        fetch('https://api.rainviewer.com/public/weather-maps.json')
+            .then(res => res.json())
+            .then(data => {{
+                const host = data.host;
+                const past = data.radar.past || [];
+                const nowcast = data.radar.nowcast || [];
+                pastCount = past.length;
+
+                frames = [...past, ...nowcast];
+                if (frames.length === 0) return;
+
+                document.getElementById('slider').max = frames.length - 1;
+
+                frames.forEach((f, idx) => {{
+                    const layer = L.tileLayer(host + f.path + '/256/{{z}}/{{x}}/{{y}}/3/1_1.png', {{
+                        opacity: idx === frames.length - 1 ? 0.8 : 0,
+                        zIndex: 100
+                    }});
+                    layer.addTo(map);
+                    radarLayers.push(layer);
+                }});
+
+                showFrame(frames.length - 1);
+                play();
+            }});
+
+        function showFrame(idx) {{
+            if (radarLayers.length === 0) return;
+            radarLayers.forEach((l, i) => l.setOpacity(i === idx ? 0.8 : 0));
+            currentIndex = idx;
+            document.getElementById('slider').value = idx;
+
+            const f = frames[idx];
+            const d = new Date(f.time * 1000);
+            const timeStr = d.toLocaleTimeString([], {{ hour: 'numeric', minute: '2-digit' }});
+            document.getElementById('timeDisplay').innerText = timeStr;
+
+            const badge = document.getElementById('statusBadge');
+            if (idx < pastCount) {{
+                badge.className = 'badge badge-past';
+                badge.innerText = (idx === pastCount - 1) ? 'LIVE RADAR' : 'PAST';
+            }} else {{
+                badge.className = 'badge badge-nowcast';
+                badge.innerText = 'PREDICTED';
+            }}
+        }}
+
+        function play() {{
+            if (timer) clearInterval(timer);
+            timer = setInterval(() => {{
+                let next = currentIndex + 1;
+                if (next >= frames.length) next = 0;
+                showFrame(next);
+            }}, 600);
+            isPlaying = true;
+            document.getElementById('playBtn').innerText = '⏸';
+        }}
+
+        function pause() {{
+            if (timer) clearInterval(timer);
+            isPlaying = false;
+            document.getElementById('playBtn').innerText = '▶';
+        }}
+
+        function togglePlay() {{
+            if (isPlaying) pause(); else play();
+        }}
+
+        function onSlider(val) {{
+            pause();
+            showFrame(parseInt(val));
+        }}
+    </script>
+</body>
+</html>"""
 
 @app.get("/weather")
 def api_weather(query: str = "", sport_team: str = "Panthers, Braves, NC State"):
