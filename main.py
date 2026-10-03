@@ -44,7 +44,7 @@ async def main(page: ft.Page):
     widget_hl_text = ft.Text("H: 80°  L: 53°", size=13, weight=ft.FontWeight.BOLD, color="amber100")
     widget_rain_badge = ft.Text("💧 0% Precip", size=11, color="cyan200", weight=ft.FontWeight.BOLD)
     widget_uv_badge = ft.Text("☀️ UV 4", size=11, color="orange200", weight=ft.FontWeight.BOLD)
-    widget_aqi_badge = ft.Text("🍃 AQI 32 (Good)", size=11, color="green300", weight=ft.FontWeight.BOLD)
+    widget_aqi_badge = ft.Text("🍃 AQI --", size=11, color="green300", weight=ft.FontWeight.BOLD)
 
     location_input = ft.TextField(
         label="Location (ZIP or City)",
@@ -390,6 +390,7 @@ async def main(page: ft.Page):
             curr = res.get("current", {})
             condition = curr.get("condition", "Sunny")
             t_val = curr.get("temp", 74)
+            feels_val = curr.get("feels_like", curr.get("heat_index", t_val))
 
             # Update radar link to new coordinates
             if "radar_url" in res:
@@ -403,10 +404,26 @@ async def main(page: ft.Page):
 
             condition_text.value = condition
             curr_temp_text.value = f"{t_val}°F"
-            feels_like_text.value = f"Feels Like: {t_val}°F"
+            feels_like_text.value = f"Feels Like: {feels_val}°F"
             humidity_text.value = f"Humidity: {curr.get('humidity', 51)}%"
             wind_text.value = f"Wind: {curr.get('wind', 7)} mph"
-            uv_badge.value = f"UV: {curr.get('uv_index', 4.0)}"
+            uv_val = curr.get("uv_index", 4.0)
+            uv_badge.value = f"UV: {uv_val}"
+
+            # AQI extraction from response
+            aqi_obj = res.get("aqi", {})
+            if isinstance(aqi_obj, dict):
+                aqi_num = aqi_obj.get("value", aqi_obj.get("aqi", "--"))
+                aqi_cat = aqi_obj.get("category", "")
+                aqi_str = f"AQI: {aqi_num} ({aqi_cat})" if aqi_cat else f"AQI: {aqi_num}"
+                widget_aqi_str = f"🍃 AQI {aqi_num} ({aqi_cat})" if aqi_cat else f"🍃 AQI {aqi_num}"
+            else:
+                aqi_str = f"AQI: {aqi_obj}"
+                widget_aqi_str = f"🍃 AQI {aqi_obj}"
+
+            aqi_badge.value = aqi_str
+            widget_aqi_badge.value = widget_aqi_str
+            widget_uv_badge.value = f"☀️ UV {uv_val}"
 
             sunrise_text.value = f"🌅 Sunrise: {curr.get('sunrise')}"
             sunset_text.value = f"🌇 Sunset: {curr.get('sunset')}"
