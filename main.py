@@ -147,7 +147,7 @@ async def main(page: ft.Page):
         detail_dialog.open = False
         page.update()
 
-    # Team Picker Dialog
+    # Team Picker Dialog Logic
     async def add_team_from_picker(team_name):
         current_val = sports_input.value.strip()
         teams = [t.strip() for t in current_val.split(",") if t.strip()]
@@ -160,7 +160,6 @@ async def main(page: ft.Page):
 
     async def select_alt_team(alt_query):
         current_val = sports_input.value.strip()
-        # Replace the first ambiguous match or append
         teams = [t.strip() for t in current_val.split(",") if t.strip()]
         replaced = False
         for idx, t in enumerate(teams):
@@ -186,9 +185,13 @@ async def main(page: ft.Page):
         chips_row = ft.Row(wrap=True, spacing=6)
         for t_name in t_list:
             chips_row.controls.append(
-                ft.ActionChip(
-                    label=ft.Text(t_name, size=11, color="white"),
+                ft.Container(
+                    content=ft.Text(t_name, size=11, color="white"),
                     bgcolor="#1c1f26",
+                    border=ft.Border.all(1, "cyan800"),
+                    border_radius=14,
+                    padding=ft.Padding(10, 5, 10, 5),
+                    ink=True,
                     on_click=lambda e, name=t_name: page.run_task(add_team_from_picker, name)
                 )
             )
@@ -336,7 +339,7 @@ async def main(page: ft.Page):
                         ft.Text(f"🌤️ {ev.get('conditions', '')}", size=12, color="green200", weight=ft.FontWeight.W_500),
                     ]
 
-                    # Disambiguation alternative choice chips
+                    # Disambiguation selection chips built with standard Container controls
                     alts = ev.get("alternatives", [])
                     if alts:
                         alt_row = ft.Row([ft.Text("Did you mean: ", size=11, color="grey400", weight=ft.FontWeight.W_600)], wrap=True, spacing=6)
@@ -344,9 +347,13 @@ async def main(page: ft.Page):
                             alt_name = alt_item.get("name", "")
                             alt_q = alt_item.get("query", "")
                             alt_row.controls.append(
-                                ft.ActionChip(
-                                    label=ft.Text(alt_name, size=10, color="cyan200"),
+                                ft.Container(
+                                    content=ft.Text(alt_name, size=10, color="cyan200"),
                                     bgcolor="#16222f",
+                                    border=ft.Border.all(1, "cyan700"),
+                                    border_radius=12,
+                                    padding=ft.Padding(8, 4, 8, 4),
+                                    ink=True,
                                     on_click=lambda e, q=alt_q: page.run_task(select_alt_team, q)
                                 )
                             )
