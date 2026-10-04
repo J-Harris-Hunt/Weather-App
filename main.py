@@ -14,7 +14,22 @@ async def main(page: ft.Page):
     latest_weather_data = {}
     current_selected_category = ["weather_climate"]
 
-    # Storage access guarded with a strict timeout to prevent WebSocket handshake stalls
+    def extract_client_ip(pg: ft.Page) -> str:
+        headers = getattr(pg, "headers", None)
+        if headers and isinstance(headers, dict):
+            for target_header in ["x-forwarded-for", "x-real-ip", "cf-connecting-ip"]:
+                for hk, hv in headers.items():
+                    if hk.lower() == target_header and hv:
+                        first_ip = hv.split(",")[0].strip()
+                        if first_ip and not first_ip.startswith(("10.", "172.16.", "192.168.", "127.")):
+                            return first_ip
+        cip = getattr(pg, "client_ip", None)
+        if cip and str(cip) not in ["127.0.0.1", "::1", "localhost", "None", ""]:
+            cip_str = str(cip).strip()
+            if not cip_str.startswith(("10.", "172.16.", "192.168.", "127.")):
+                return cip_str
+        return ""
+
     async def storage_get(key: str):
         try:
             async def _inner():
@@ -28,7 +43,7 @@ async def main(page: ft.Page):
                 if inspect.isawaitable(res):
                     res = await res
                 return res
-            return await asyncio.wait_for(_inner(), timeout=0.4)
+            return await asyncio.wait_for(_inner(), timeout=0.35)
         except Exception:
             return None
 
@@ -43,7 +58,7 @@ async def main(page: ft.Page):
                 res = page.client_storage.set(key, value)
                 if inspect.isawaitable(res):
                     await res
-            await asyncio.wait_for(_inner(), timeout=0.4)
+            await asyncio.wait_for(_inner(), timeout=0.35)
         except Exception:
             pass
 
@@ -595,7 +610,8 @@ async def main(page: ft.Page):
         location_display_text.value = "📍 Detecting location..."
         page.update()
         try:
-            detected_loc, lat, lon, loc_label = await asyncio.to_thread(server.auto_detect_location)
+            client_ip = extract_client_ip(page)
+            detected_loc, lat, lon, loc_label = await asyncio.to_thread(server.auto_detect_location, client_ip)
             if detected_loc:
                 location_input.value = detected_loc
                 page.update()
@@ -878,7 +894,9 @@ async def main(page: ft.Page):
 
     page.add(full_dashboard)
 
-    # Initial boot sequence: load saved sports teams, check storage mode, or run auto-detect
+    # Yield control briefly to ensure the UI paints immediately
+    await asyncio.sleep(0.05)
+
     saved_teams = await storage_get("tmw_saved_teams")
     if saved_teams:
         sports_input.value = saved_teams
@@ -896,4 +914,3 @@ async def main(page: ft.Page):
 
 if __name__ == "__main__":
     ft.app(target=main, view=ft.AppView.WEB_BROWSER)
-    

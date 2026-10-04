@@ -76,22 +76,32 @@ WMO_CODE_MAP = {
     95: "Thunderstorm", 96: "Thunderstorm w/ Hail", 99: "Heavy Hail Storm"
 }
 
+WILMINGTON_FALLBACK = ("28412", 34.1378, -77.9150, "Wilmington, NC (28412)")
+
 def auto_detect_location(client_ip: str = None):
-    ip_target = ""
-    if client_ip and client_ip not in ["127.0.0.1", "::1", "localhost", "None", ""]:
-        ip_target = client_ip.strip()
+    ip_target = (client_ip or "").strip()
+    
+    # If no public client IP is provided or it's a local/internal address, return home baseline
+    if not ip_target or ip_target in ["127.0.0.1", "::1", "localhost", "None"] or ip_target.startswith(("10.", "172.16.", "192.168.")):
+        return WILMINGTON_FALLBACK
 
     headers = {"User-Agent": "ThickMooseWeather/2.0 (contact@thickmooselabs.com)"}
 
     try:
-        url = f"http://ip-api.com/json/{ip_target}" if ip_target else "http://ip-api.com/json/"
-        r = requests.get(url, timeout=3.5).json()
+        url = f"http://ip-api.com/json/{ip_target}?fields=status,message,country,region,regionName,city,zip,lat,lon,hosting"
+        r = requests.get(url, headers=headers, timeout=3.5).json()
         if r.get("status") == "success":
             city = r.get("city", "")
             region = r.get("region", "")
             postal = r.get("zip", "")
             lat = float(r.get("lat", 0.0))
             lon = float(r.get("lon", 0.0))
+            is_hosting = r.get("hosting", False)
+
+            # Ignore cloud data center hits (e.g. AWS/Render in Ashburn)
+            if is_hosting or city.lower() == "ashburn":
+                return WILMINGTON_FALLBACK
+
             loc_label = f"{city}, {region} ({postal})" if postal else f"{city}, {region}"
             search_query = postal or f"{city}, {region}" or f"{lat:.4f},{lon:.4f}"
             return search_query, lat, lon, loc_label
@@ -99,21 +109,21 @@ def auto_detect_location(client_ip: str = None):
         pass
 
     try:
-        url = f"https://freeipapi.com/api/json/{ip_target}" if ip_target else "https://freeipapi.com/api/json"
+        url = f"https://freeipapi.com/api/json/{ip_target}"
         r = requests.get(url, headers=headers, timeout=3.5).json()
         city = r.get("cityName", "")
         region = r.get("regionName", "")
         postal = r.get("zipCode", "")
         lat = float(r.get("latitude", 0.0))
         lon = float(r.get("longitude", 0.0))
-        if city or (lat and lon):
+        if city and city.lower() != "ashburn":
             loc_label = f"{city}, {region} ({postal})" if postal else f"{city}, {region}"
             search_query = postal or f"{city}, {region}" or f"{lat:.4f},{lon:.4f}"
             return search_query, lat, lon, loc_label
     except Exception:
         pass
 
-    return "28412", 34.1378, -77.9150, "Wilmington, NC (28412)"
+    return WILMINGTON_FALLBACK
 
 def get_coordinates(query: str):
     clean_q = str(query).strip()
@@ -1381,4 +1391,4 @@ app.mount("/", flet_fastapi.app(flet_ui_main, assets_dir=assets_dir))
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
-    uvicorn.run("server:app", host="0.0.0.0", port=port)
+    uvicorn.run("server:app", host="0.0.0.0", port=port, proxy_headers=True, forwarded_allow_ips="*")
