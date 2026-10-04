@@ -5,10 +5,10 @@ from datetime import datetime
 
 # Replace these with your live Stripe Payment Links from dashboard.stripe.com/payment-links
 DONATION_LINKS = {
-    "1": "https://buy.stripe.com/test_1dollar",
-    "3": "https://buy.stripe.com/test_3dollars",
-    "5": "https://buy.stripe.com/test_5dollars",
-    "custom": "https://buy.stripe.com/test_custom",
+    "1": "https://buy.stripe.com/dRm4gBcyAfh1dw46u3g3601",
+    "3": "https://buy.stripe.com/fZubJ34246KveA89Gfg3605",
+    "5": "https://buy.stripe.com/dRm5kF8ik2ufbnW5pZg3606",
+    "10": "https://buy.stripe.com/aFa00l0PS7OzfEc05Fg3604",
 }
 
 async def main(page: ft.Page):
@@ -148,7 +148,7 @@ async def main(page: ft.Page):
                     make_donation_btn("$1", "1"),
                     make_donation_btn("$3", "3"),
                     make_donation_btn("$5", "5"),
-                    make_donation_btn("Custom", "custom"),
+                    make_donation_btn("$10", "10"),
                 ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6, scroll=ft.ScrollMode.ADAPTIVE),
         ),
