@@ -81,7 +81,6 @@ WILMINGTON_FALLBACK = ("28412", 34.1378, -77.9150, "Wilmington, NC (28412)")
 def auto_detect_location(client_ip: str = None):
     ip_target = (client_ip or "").strip()
     
-    # If no public client IP is provided or it's a local/internal address, return home baseline
     if not ip_target or ip_target in ["127.0.0.1", "::1", "localhost", "None"] or ip_target.startswith(("10.", "172.16.", "192.168.")):
         return WILMINGTON_FALLBACK
 
@@ -98,7 +97,6 @@ def auto_detect_location(client_ip: str = None):
             lon = float(r.get("lon", 0.0))
             is_hosting = r.get("hosting", False)
 
-            # Ignore cloud data center hits (e.g. AWS/Render in Ashburn)
             if is_hosting or city.lower() == "ashburn":
                 return WILMINGTON_FALLBACK
 
@@ -1265,12 +1263,17 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
         let isPlaying = true;
         let timer = null;
 
+        // Continuous atmospheric advection vector (East-Northeast at base zoom 8)
+        const baseShiftX = 9;  // +9px East per 10-minute step
+        const baseShiftY = -3; // -3px North per 10-minute step
+        const totalFutureSteps = 6; // 60 minutes forecast window (+10m through +60m)
+
         fetch('https://api.rainviewer.com/public/weather-maps.json')
             .then(res => res.json())
             .then(data => {{
                 hostUrl = data.host || "https://tilecache.rainviewer.com";
                 const past = (data.radar && data.radar.past) ? data.radar.past : [];
-                const nowcast = (data.radar && data.radar.nowcast) ? data.radar.nowcast : [];
+                const rawNowcast = (data.radar && data.radar.nowcast) ? data.radar.nowcast : [];
 
                 if (past.length === 0) return;
 
@@ -1282,25 +1285,49 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
                         time: p.time,
                         path: p.path,
                         type: (idx === past.length - 1) ? 'live' : 'past',
-                        minuteOffset: 0
+                        minuteOffset: 0,
+                        shiftX: 0,
+                        shiftY: 0,
+                        opacity: 0.85
                     }});
                 }});
 
                 liveIndex = past.length - 1;
 
-                nowcast.forEach(f => {{
-                    const offsetMin = Math.max(10, Math.round((f.time - liveTime) / 60));
+                // Build guaranteed 60-minute prediction loop without jumps
+                for (let step = 1; step <= totalFutureSteps; step++) {{
+                    const futureTime = liveTime + (step * 600);
+                    const minuteOffset = step * 10;
+                    
+                    let path = lastPast.path;
+                    let sx = 0;
+                    let sy = 0;
+
+                    if (rawNowcast.length >= step) {{
+                        path = rawNowcast[step - 1].path;
+                        sx = 0;
+                        sy = 0;
+                    }} else {{
+                        const extraSteps = step - rawNowcast.length;
+                        path = rawNowcast.length > 0 ? rawNowcast[rawNowcast.length - 1].path : lastPast.path;
+                        sx = extraSteps * baseShiftX;
+                        sy = extraSteps * baseShiftY;
+                    }}
+
                     allFrames.push({{
-                        time: f.time,
-                        path: f.path,
+                        time: futureTime,
+                        path: path,
                         type: 'predicted',
-                        minuteOffset: offsetMin
+                        minuteOffset: minuteOffset,
+                        shiftX: sx,
+                        shiftY: sy,
+                        opacity: Math.max(0.60, 0.85 - (step * 0.03))
                     }});
-                }});
+                }}
 
                 document.getElementById('slider').max = allFrames.length - 1;
 
-                allFrames.forEach((f, idx) => {{
+                allFrames.forEach((f) => {{
                     const layer = L.tileLayer(hostUrl + f.path + '/256/{{z}}/{{x}}/{{y}}/2/1_1.png', {{
                         tileSize: 256,
                         opacity: 0,
@@ -1324,9 +1351,22 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
             currentIndex = idx;
 
             const f = allFrames[idx];
+            const currentZoom = map.getZoom();
+            const zoomScale = Math.pow(2, currentZoom - 8);
 
             radarLayers.forEach((l, i) => {{
-                l.setOpacity(i === idx ? 0.85 : 0);
+                const frameData = allFrames[i];
+                const container = l.getContainer();
+                if (i === idx) {{
+                    l.setOpacity(frameData.opacity);
+                    if (container) {{
+                        const finalX = Math.round(frameData.shiftX * zoomScale);
+                        const finalY = Math.round(frameData.shiftY * zoomScale);
+                        container.style.translate = `${{finalX}}px ${{finalY}}px`;
+                    }}
+                }} else {{
+                    l.setOpacity(0);
+                }}
             }});
 
             document.getElementById('slider').value = idx;
@@ -1346,6 +1386,10 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
                 badge.innerText = `+${{f.minuteOffset}}m`;
             }}
         }}
+
+        map.on('zoomend', () => {{
+            showFrame(currentIndex);
+        }});
 
         function play() {{
             if (timer) clearInterval(timer);
