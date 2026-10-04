@@ -11,7 +11,32 @@ async def main(page: ft.Page):
 
     latest_weather_data = {}
     current_selected_category = ["weather_climate"]
-    current_auto_loc = [""]
+
+    # Storage helper supporting both async and sync Flet ClientStorage APIs
+    async def storage_get(key: str):
+        try:
+            if hasattr(page.client_storage, "get_async"):
+                res = await page.client_storage.get_async(key)
+                if res is not None:
+                    return res
+        except Exception:
+            pass
+        try:
+            return page.client_storage.get(key)
+        except Exception:
+            return None
+
+    async def storage_set(key: str, value: str):
+        try:
+            if hasattr(page.client_storage, "set_async"):
+                await page.client_storage.set_async(key, value)
+                return
+        except Exception:
+            pass
+        try:
+            page.client_storage.set(key, value)
+        except Exception:
+            pass
 
     app_header = ft.Container(
         content=ft.Row([
@@ -64,14 +89,6 @@ async def main(page: ft.Page):
         focused_border_color="amber200",
         dense=True
     )
-
-    # Restore saved teams on load
-    try:
-        saved_teams = await page.client_storage.get_async("tmw_saved_teams")
-        if saved_teams:
-            sports_input.value = saved_teams
-    except Exception:
-        pass
 
     location_display_text = ft.Text("📍 Enter address or tap 📍 to auto-detect", size=14, color="cyan200", weight=ft.FontWeight.W_600)
     condition_text = ft.Text("Ready for location", size=18, weight=ft.FontWeight.BOLD, color="amber200")
@@ -154,7 +171,7 @@ async def main(page: ft.Page):
         team_picker_dialog.open = False
         page.update()
         if location_input.value.strip():
-            mode = await page.client_storage.get_async("tmw_location_mode")
+            mode = await storage_get("tmw_location_mode")
             await load_weather(is_auto=(mode == "auto"))
 
     async def select_alt_team(alt_query):
@@ -171,7 +188,7 @@ async def main(page: ft.Page):
         sports_input.value = ", ".join(teams)
         page.update()
         if location_input.value.strip():
-            mode = await page.client_storage.get_async("tmw_location_mode")
+            mode = await storage_get("tmw_location_mode")
             await load_weather(is_auto=(mode == "auto"))
 
     popular_teams_data = [
@@ -540,29 +557,15 @@ async def main(page: ft.Page):
     category_buttons_row = ft.Row(controls=category_chips, spacing=8, scroll=ft.ScrollMode.ADAPTIVE)
 
     async def handle_autodetect_click(e=None):
-        try:
-            await page.client_storage.set_async("tmw_location_mode", "auto")
-        except Exception:
-            pass
+        await storage_set("tmw_location_mode", "auto")
         await auto_detect_gps()
 
     async def load_weather_manual(e=None):
-        current_auto_loc[0] = ""
-        try:
-            await page.client_storage.set_async("tmw_location_mode", "manual")
-        except Exception:
-            pass
-        await load_weather(is_auto=False)
-
-    async def on_location_text_changed(e):
         val = location_input.value.strip()
-        # Only switch to manual if the text differs from the auto-detected location
-        if val and val != current_auto_loc[0]:
-            current_auto_loc[0] = ""
-            try:
-                await page.client_storage.set_async("tmw_location_mode", "manual")
-            except Exception:
-                pass
+        if val:
+            await storage_set("tmw_location_mode", "manual")
+            await storage_set("tmw_saved_location", val)
+            await load_weather(is_auto=False)
 
     async def auto_detect_gps():
         import server
@@ -572,13 +575,10 @@ async def main(page: ft.Page):
         try:
             detected_loc, lat, lon, loc_label = server.auto_detect_location(client_ip)
             if detected_loc:
-                current_auto_loc[0] = detected_loc.strip()
                 location_input.value = detected_loc
                 page.update()
-                try:
-                    await page.client_storage.set_async("tmw_location_mode", "auto")
-                except Exception:
-                    pass
+                await storage_set("tmw_location_mode", "auto")
+                await storage_set("tmw_saved_location", detected_loc)
                 await load_weather(is_auto=True)
             else:
                 location_display_text.value = "📍 Could not detect location. Please type your city or ZIP."
@@ -597,12 +597,9 @@ async def main(page: ft.Page):
             page.update()
             return
 
-        try:
-            if not is_auto:
-                await page.client_storage.set_async("tmw_saved_location", loc)
-            await page.client_storage.set_async("tmw_saved_teams", teams)
-        except Exception:
-            pass
+        if not is_auto:
+            await storage_set("tmw_saved_location", loc)
+        await storage_set("tmw_saved_teams", teams)
 
         try:
             import server
@@ -733,7 +730,7 @@ async def main(page: ft.Page):
             location_display_text.value = f"📍 {ex}"
             page.update()
 
-    location_input.on_change = on_location_text_changed
+    # Form submission explicitly triggers manual mode override
     location_input.on_submit = load_weather_manual
     sports_input.on_submit = load_weather_manual
 
@@ -861,20 +858,21 @@ async def main(page: ft.Page):
 
     page.add(full_dashboard)
 
-    # Startup resolution: run auto-detect if mode is auto, or restore manual location
-    try:
-        loc_mode = await page.client_storage.get_async("tmw_location_mode")
-        if loc_mode == "auto":
-            await auto_detect_gps()
-        else:
-            saved_loc = await page.client_storage.get_async("tmw_saved_location")
-            if saved_loc:
-                location_input.value = saved_loc
-                page.update()
-                await load_weather(is_auto=False)
-    except Exception:
-        pass
+    # Startup resolution: restore teams, then evaluate persistent location mode
+    saved_teams = await storage_get("tmw_saved_teams")
+    if saved_teams:
+        sports_input.value = saved_teams
+        page.update()
+
+    loc_mode = await storage_get("tmw_location_mode")
+    if loc_mode == "auto":
+        await auto_detect_gps()
+    elif loc_mode == "manual":
+        saved_loc = await storage_get("tmw_saved_location")
+        if saved_loc:
+            location_input.value = saved_loc
+            page.update()
+            await load_weather(is_auto=False)
 
 if __name__ == "__main__":
     ft.app(target=main, view=ft.AppView.WEB_BROWSER)
-    
