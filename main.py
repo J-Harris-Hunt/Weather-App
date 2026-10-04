@@ -3,6 +3,14 @@ import inspect
 import flet as ft
 from datetime import datetime
 
+# Replace these with your live Stripe Payment Links from dashboard.stripe.com/payment-links
+DONATION_LINKS = {
+    "1": "https://buy.stripe.com/test_1dollar",
+    "3": "https://buy.stripe.com/test_3dollars",
+    "5": "https://buy.stripe.com/test_5dollars",
+    "custom": "https://buy.stripe.com/test_custom",
+}
+
 async def main(page: ft.Page):
     page.title = "Thick Moose Weather"
     page.vertical_alignment = ft.MainAxisAlignment.START
@@ -81,8 +89,101 @@ async def main(page: ft.Page):
                 ft.Text("Hyper-Local Microclimate Intelligence", size=12, color="cyan200", weight=ft.FontWeight.W_500),
             ], spacing=2),
         ], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        padding=ft.Padding(0, 10, 0, 16),
+        padding=ft.Padding(0, 10, 0, 8),
         alignment=ft.Alignment(0, 0)
+    )
+
+    # Donation Dialog Setup
+    def open_donation(e):
+        donation_dialog.open = True
+        page.update()
+
+    def close_donation(e):
+        donation_dialog.open = False
+        page.update()
+
+    def make_donation_btn(label: str, key: str):
+        return ft.Container(
+            content=ft.Text(label, size=14, weight=ft.FontWeight.BOLD, color="black"),
+            bgcolor="amber400",
+            border_radius=10,
+            padding=ft.Padding(16, 10, 16, 10),
+            ink=True,
+            url=DONATION_LINKS.get(key, "#"),
+            alignment=ft.Alignment(0, 0)
+        )
+
+    donation_dialog = ft.AlertDialog(
+        modal=True,
+        content_padding=ft.Padding(18, 18, 18, 18),
+        content=ft.Container(
+            width=360,
+            content=ft.Column([
+                ft.Container(
+                    content=ft.Image(
+                        src="/donation_dog.png",
+                        width=280,
+                        height=280,
+                        fit="cover",
+                        border_radius=18,
+                        error_content=ft.Icon(ft.Icons.PETS, size=80, color="amber300"),
+                    ),
+                    alignment=ft.Alignment(0, 0),
+                    border=ft.Border.all(2, "amber400"),
+                    border_radius=20,
+                ),
+                ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+                ft.Text(
+                    "Weather should be free! Sharing it with the world in a neat and tidy 1 stop package, unfortunately, is not. "
+                    "To keep this app AD FREE and with no Subscription or Purchase Price, please consider donating to the Thick Moose "
+                    "so he can continue providing premium hyper-local weather free of charge and ugly, disruptive ads.",
+                    size=12,
+                    color="white",
+                    text_align=ft.TextAlign.CENTER,
+                    weight=ft.FontWeight.W_400,
+                ),
+                ft.Divider(height=12, color="grey800"),
+                ft.Text("Select Contribution Amount", size=13, weight=ft.FontWeight.BOLD, color="amber300", text_align=ft.TextAlign.CENTER),
+                ft.Row([
+                    make_donation_btn("$1", "1"),
+                    make_donation_btn("$3", "3"),
+                    make_donation_btn("$5", "5"),
+                    make_donation_btn("Custom", "custom"),
+                ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6, scroll=ft.ScrollMode.ADAPTIVE),
+        ),
+        actions=[
+            ft.TextButton("Maybe Later", on_click=close_donation)
+        ],
+        actions_alignment=ft.MainAxisAlignment.CENTER,
+    )
+    page.overlay.append(donation_dialog)
+
+    # Clickable Header Banner / Icon
+    keep_weather_free_badge = ft.Container(
+        content=ft.Row([
+            ft.Container(
+                content=ft.Image(
+                    src="/donation_dog.png",
+                    width=38,
+                    height=38,
+                    fit="cover",
+                    border_radius=19,
+                    error_content=ft.Icon(ft.Icons.PETS, color="amber300", size=22),
+                ),
+                border=ft.Border.all(1.5, "amber300"),
+                border_radius=20,
+            ),
+            ft.Text("Keep Weather Free!!!", size=13, weight=ft.FontWeight.BOLD, color="amber300"),
+            ft.Icon(ft.Icons.VOLUNTEER_ACTIVISM, size=18, color="amber300"),
+        ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
+        bgcolor="#18202d",
+        border=ft.Border.all(1.5, "amber400"),
+        border_radius=22,
+        padding=ft.Padding(14, 6, 16, 6),
+        ink=True,
+        on_click=open_donation,
+        tooltip="Support Thick Moose Weather — Keep it 100% Ad-Free",
     )
 
     widget_loc_text = ft.Text("No location selected", size=13, weight=ft.FontWeight.W_600, color="amber200")
@@ -854,6 +955,8 @@ async def main(page: ft.Page):
 
     full_dashboard = ft.Column([
         app_header,
+        ft.Row([keep_weather_free_badge], alignment=ft.MainAxisAlignment.CENTER),
+        ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
         ft.Row([photorealistic_2x2_widget], alignment=ft.MainAxisAlignment.CENTER),
         ft.Divider(height=15, color="grey800"),
         search_row,
@@ -894,7 +997,6 @@ async def main(page: ft.Page):
 
     page.add(full_dashboard)
 
-    # Yield control briefly to ensure the UI paints immediately
     await asyncio.sleep(0.05)
 
     saved_teams = await storage_get("tmw_saved_teams")
