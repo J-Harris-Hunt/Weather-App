@@ -14,7 +14,6 @@ async def main(page: ft.Page):
     latest_weather_data = {}
     current_selected_category = ["weather_climate"]
 
-    # Bulletproof storage helpers that safely await coroutines returned by Flet
     async def storage_get(key: str):
         try:
             if hasattr(page.client_storage, "get_async"):
@@ -140,7 +139,7 @@ async def main(page: ft.Page):
                 ft.Icon(ft.Icons.SATELLITE_ALT, color="cyan300", size=18),
                 ft.Text("Live High-Resolution Doppler Radar", size=14, weight=ft.FontWeight.BOLD, color="amber300"),
             ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
-            ft.Text("Past 2 hours + 2 hours predicted radar path with pinned location", size=11, color="grey400", text_align=ft.TextAlign.CENTER),
+            ft.Text("Past 2 hours + predicted nowcast path with pinned location", size=11, color="grey400", text_align=ft.TextAlign.CENTER),
             radar_timestamp_text,
             ft.Container(height=4),
             radar_button_widget,
@@ -184,7 +183,7 @@ async def main(page: ft.Page):
         page.update()
         if location_input.value.strip():
             mode = await storage_get("tmw_location_mode")
-            await load_weather(is_auto=(mode == "auto"))
+            await load_weather(is_auto=(mode != "manual"))
 
     async def select_alt_team(alt_query):
         current_val = sports_input.value.strip()
@@ -201,7 +200,7 @@ async def main(page: ft.Page):
         page.update()
         if location_input.value.strip():
             mode = await storage_get("tmw_location_mode")
-            await load_weather(is_auto=(mode == "auto"))
+            await load_weather(is_auto=(mode != "manual"))
 
     popular_teams_data = [
         ("🏈 NFL", ["Carolina Panthers", "Dallas Cowboys", "Kansas City Chiefs", "Philadelphia Eagles"]),
@@ -419,7 +418,6 @@ async def main(page: ft.Page):
                             )
                         )
 
-                    # Fully responsive portrait & landscape event card layout
                     card_content = [
                         ft.Row(header_items, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                         ft.Row([
@@ -583,6 +581,7 @@ async def main(page: ft.Page):
 
     async def handle_autodetect_click(e=None):
         await storage_set("tmw_location_mode", "auto")
+        await storage_set("tmw_saved_location", "")
         await auto_detect_gps()
 
     async def load_weather_manual(e=None):
@@ -603,7 +602,6 @@ async def main(page: ft.Page):
                 location_input.value = detected_loc
                 page.update()
                 await storage_set("tmw_location_mode", "auto")
-                await storage_set("tmw_saved_location", detected_loc)
                 await load_weather(is_auto=True)
             else:
                 location_display_text.value = "📍 Could not detect location. Please type your city or ZIP."
@@ -755,7 +753,6 @@ async def main(page: ft.Page):
             location_display_text.value = f"📍 {ex}"
             page.update()
 
-    # Form submission explicitly triggers manual mode override
     location_input.on_submit = load_weather_manual
     sports_input.on_submit = load_weather_manual
 
@@ -883,7 +880,6 @@ async def main(page: ft.Page):
 
     page.add(full_dashboard)
 
-    # Delay slightly to allow the client WebSocket to synchronize localStorage
     await asyncio.sleep(0.15)
 
     saved_teams = await storage_get("tmw_saved_teams")
@@ -894,12 +890,14 @@ async def main(page: ft.Page):
     loc_mode = await storage_get("tmw_location_mode")
     saved_loc = await storage_get("tmw_saved_location")
 
-    if loc_mode == "auto":
-        await auto_detect_gps()
-    elif loc_mode == "manual" and saved_loc:
-        location_input.value = saved_loc
+    # If the user explicitly typed and saved a manual location, load it.
+    # In all other cases (auto mode, initial visit, or session restart), auto-detect immediately.
+    if loc_mode == "manual" and saved_loc and saved_loc.strip():
+        location_input.value = saved_loc.strip()
         page.update()
         await load_weather(is_auto=False)
+    else:
+        await auto_detect_gps()
 
 if __name__ == "__main__":
     ft.app(target=main, view=ft.AppView.WEB_BROWSER)

@@ -690,7 +690,7 @@ def fetch_comprehensive_weather(lat: float, lon: float):
                     curr_obs["wind"] = w_mph
                     curr_obs["humidity"] = hum_val
                     curr_obs["heat_index"] = heat_idx
-                    curr_feels_like = heat_idx
+                    curr_obs["feels_like"] = heat_idx
     except Exception:
         pass
 
@@ -843,7 +843,7 @@ def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC St
     next_day_rain = daily_list[1]["rain_prob_max"] if len(daily_list) > 1 else 0
 
     encoded_label = urllib.parse.quote(location_name)
-    radar_url = f"/radar?lat={round(lat, 4)}&lon={round(lon, 4)}&label={encoded_label}&wind_speed={curr_wind}&wind_dir={curr_wind_dir}"
+    radar_url = f"/radar?lat={round(lat, 4)}&lon={round(lon, 4)}&label={encoded_label}"
     radar_time_str = now.strftime("%I:%M %p").lstrip("0")
 
     beach_base = 100 - abs(avg_temp_6h - 82) * 2.0 - (avg_wind_6h * 1.5) - rain_penalty
@@ -1111,7 +1111,7 @@ def get_manifest():
     raise HTTPException(status_code=404, detail="Manifest not found")
 
 @app.get("/radar", response_class=HTMLResponse)
-def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Location", wind_speed: float = 12.0, wind_dir: float = 240.0):
+def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Location", **kwargs):
     return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -1155,7 +1155,6 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
             background: linear-gradient(to right, #00e5ff, #00e676, #ffeb3b, #ff5722, #d500f9);
         }}
 
-        /* Responsive controls that never push slider off-screen */
         .controls {{
             position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
             background: rgba(26, 26, 26, 0.94); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
@@ -1224,8 +1223,6 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
         const lat = {lat};
         const lon = {lon};
         const labelText = "{label}";
-        const windSpeedMph = {wind_speed};
-        const windDirDeg = {wind_dir};
 
         const map = L.map('map', {{ zoomControl: false, minZoom: 4, maxZoom: 18 }}).setView([lat, lon], 8);
         L.control.zoom({{ position: 'topright' }}).addTo(map);
@@ -1258,67 +1255,38 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
         let isPlaying = true;
         let timer = null;
 
-        const stormSpeedMph = Math.max(16, windSpeedMph * 1.4);
-        const stormHeadingDeg = (windDirDeg + 180) % 360;
-        const headingRad = stormHeadingDeg * Math.PI / 180;
-        
-        const pixelsPer10Min = Math.max(8, (stormSpeedMph * 0.447 * 600) / 480);
-        const stepDx = Math.round(pixelsPer10Min * Math.sin(headingRad));
-        const stepDy = Math.round(-pixelsPer10Min * Math.cos(headingRad));
-
         fetch('https://api.rainviewer.com/public/weather-maps.json')
             .then(res => res.json())
             .then(data => {{
                 hostUrl = data.host || "https://tilecache.rainviewer.com";
                 const past = (data.radar && data.radar.past) ? data.radar.past : [];
-                let nowcast = (data.radar && data.radar.nowcast) ? data.radar.nowcast : [];
+                const nowcast = (data.radar && data.radar.nowcast) ? data.radar.nowcast : [];
 
                 if (past.length === 0) return;
 
                 const lastPast = past[past.length - 1];
-                let realNowcast = [];
-                nowcast.forEach(f => {{
-                    if (f.path && f.path !== lastPast.path) {{
-                        realNowcast.push(f);
-                    }}
-                }});
+                const liveTime = lastPast.time;
 
                 past.forEach((p, idx) => {{
                     allFrames.push({{
                         time: p.time,
                         path: p.path,
                         type: (idx === past.length - 1) ? 'live' : 'past',
-                        shiftX: 0,
-                        shiftY: 0,
-                        opacity: 0.85
+                        minuteOffset: 0
                     }});
                 }});
 
                 liveIndex = past.length - 1;
 
-                for (let step = 1; step <= 12; step++) {{
-                    const futureTime = lastPast.time + (step * 600);
-                    const minuteOffset = step * 10;
-                    let path = lastPast.path;
-                    let sx = step * stepDx;
-                    let sy = step * stepDy;
-
-                    if (realNowcast.length >= step) {{
-                        path = realNowcast[step - 1].path;
-                        sx = 0;
-                        sy = 0;
-                    }}
-
+                nowcast.forEach(f => {{
+                    const offsetMin = Math.max(10, Math.round((f.time - liveTime) / 60));
                     allFrames.push({{
-                        time: futureTime,
-                        path: path,
+                        time: f.time,
+                        path: f.path,
                         type: 'predicted',
-                        minuteOffset: minuteOffset,
-                        shiftX: sx,
-                        shiftY: sy,
-                        opacity: Math.max(0.55, 0.85 - (step * 0.025))
+                        minuteOffset: offsetMin
                     }});
-                }}
+                }});
 
                 document.getElementById('slider').max = allFrames.length - 1;
 
@@ -1348,16 +1316,7 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
             const f = allFrames[idx];
 
             radarLayers.forEach((l, i) => {{
-                const frameData = allFrames[i];
-                const container = l.getContainer();
-                if (i === idx) {{
-                    l.setOpacity(frameData.opacity);
-                    if (container) {{
-                        container.style.translate = `${{frameData.shiftX}}px ${{frameData.shiftY}}px`;
-                    }}
-                }} else {{
-                    l.setOpacity(0);
-                }}
+                l.setOpacity(i === idx ? 0.85 : 0);
             }});
 
             document.getElementById('slider').value = idx;
