@@ -286,9 +286,11 @@ def is_coastal_region(lat: float, lon: float) -> bool:
 
 def fetch_live_aqi(lat: float, lon: float):
     try:
-        url = f"https://air-quality-api.open-meteo.com/v1/air-quality?latitude={lat}&longitude={lon}&current=us_aqi"
+        url = f"https://air-quality-api.open-meteo.com/v1/air-quality?latitude={lat}&longitude={lon}&current=us_aqi,pm2_5,pm10"
         res = requests.get(url, timeout=3).json()
-        val = int(res.get("current", {}).get("us_aqi", 35))
+        curr_aq = res.get("current", {})
+        val = int(curr_aq.get("us_aqi", 35))
+        pm25 = curr_aq.get("pm2_5", 8.0)
         if val <= 50:
             cat = "Good"
         elif val <= 100:
@@ -299,9 +301,9 @@ def fetch_live_aqi(lat: float, lon: float):
             cat = "Unhealthy"
         else:
             cat = "Very Unhealthy"
-        return {"aqi": val, "value": val, "category": cat, "status": f"{val} ({cat})"}
+        return {"aqi": val, "value": val, "category": cat, "pm25": pm25, "status": f"{val} ({cat})"}
     except Exception:
-        return {"aqi": 35, "value": 35, "category": "Good", "status": "35 (Good)"}
+        return {"aqi": 35, "value": 35, "category": "Good", "pm25": 8.0, "status": "35 (Good)"}
 
 def fetch_noaa_tides(lat: float, lon: float, location_name: str):
     if 33.8 <= lat <= 34.5 and -78.2 <= lon <= -77.7:
@@ -555,9 +557,9 @@ def fetch_comprehensive_weather(lat: float, lon: float):
     try:
         om_url = (
             f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
-            f"&current=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_direction_10m,weather_code"
-            f"&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,precipitation_probability,weather_code"
-            f"&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset"
+            f"&current=temperature_2m,relative_humidity_2m,apparent_temperature,surface_pressure,uv_index,wind_speed_10m,wind_direction_10m,weather_code"
+            f"&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,surface_pressure,uv_index,wind_speed_10m,precipitation_probability,weather_code"
+            f"&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max,sunrise,sunset"
             f"&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto"
         )
         om_res = requests.get(om_url, timeout=4).json()
@@ -572,6 +574,8 @@ def fetch_comprehensive_weather(lat: float, lon: float):
         hum_val = round(curr_data.get("relative_humidity_2m", 65.0), 1)
         apparent_temp_fallback = round(curr_data.get("apparent_temperature", t_f))
         wind_dir_val = round(curr_data.get("wind_direction_10m", 240.0), 1)
+        pressure_val = round(curr_data.get("surface_pressure", 1013.25), 1)
+        uv_curr = float(curr_data.get("uv_index", 3.5))
 
         curr_obs = {
             "temp": t_f,
@@ -579,6 +583,8 @@ def fetch_comprehensive_weather(lat: float, lon: float):
             "wind": round(curr_data.get("wind_speed_10m", 0.0), 1),
             "wind_direction": wind_dir_val,
             "humidity": hum_val,
+            "pressure_hpa": pressure_val,
+            "uv_index": uv_curr,
             "heat_index": apparent_temp_fallback,
             "feels_like": apparent_temp_fallback
         }
@@ -588,6 +594,7 @@ def fetch_comprehensive_weather(lat: float, lon: float):
         highs = daily_data.get("temperature_2m_max", [])
         lows = daily_data.get("temperature_2m_min", [])
         precips = daily_data.get("precipitation_probability_max", [])
+        uv_maxs = daily_data.get("uv_index_max", [])
         codes = daily_data.get("weather_code", [])
         sunrises = daily_data.get("sunrise", [])
         sunsets = daily_data.get("sunset", [])
@@ -604,6 +611,7 @@ def fetch_comprehensive_weather(lat: float, lon: float):
             h_val = round(highs[i]) if i < len(highs) and highs[i] is not None else curr_obs["temp"] + 3
             l_val = round(lows[i]) if i < len(lows) and lows[i] is not None else max(35, curr_obs["temp"] - 12)
             r_val = precips[i] if i < len(precips) and precips[i] is not None else 0
+            u_val = uv_maxs[i] if i < len(uv_maxs) and uv_maxs[i] is not None else 4.0
             c_desc = WMO_CODE_MAP.get(codes[i], "Partly Cloudy") if i < len(codes) else "Clear"
 
             d_sr = "06:45 AM"
@@ -618,6 +626,7 @@ def fetch_comprehensive_weather(lat: float, lon: float):
                 "high": h_val,
                 "low": l_val,
                 "rain_prob_max": r_val,
+                "uv_max": u_val,
                 "day_rain_prob": r_val,
                 "night_rain_prob": max(0, r_val - 15),
                 "sunrise": d_sr,
@@ -634,6 +643,7 @@ def fetch_comprehensive_weather(lat: float, lon: float):
         h_rains = h_data.get("precipitation_probability", [])
         h_codes = h_data.get("weather_code", [])
         h_winds = h_data.get("wind_speed_10m", [])
+        h_press = h_data.get("surface_pressure", [])
         now_local = datetime.now(resolved_tz)
 
         for idx, t_str in enumerate(h_times):
@@ -646,6 +656,7 @@ def fetch_comprehensive_weather(lat: float, lon: float):
                     "temp": round(h_temps[idx]) if idx < len(h_temps) else 65,
                     "condition": WMO_CODE_MAP.get(h_codes[idx], "Partly Cloudy") if idx < len(h_codes) else "Clear",
                     "rain_chance": h_rains[idx] if idx < len(h_rains) else 0,
+                    "pressure": h_press[idx] if idx < len(h_press) else 1013.0,
                     "is_night": (dt_obj.hour < 7 or dt_obj.hour >= 19),
                     "wind_mph": round(h_winds[idx], 1) if idx < len(h_winds) else 5.0
                 })
@@ -684,7 +695,7 @@ def fetch_comprehensive_weather(lat: float, lon: float):
         pass
 
     if not curr_obs:
-        curr_obs = {"temp": 66, "condition": "Clear", "wind": 5.0, "wind_direction": 240.0, "humidity": 65.0, "heat_index": 66, "feels_like": 66}
+        curr_obs = {"temp": 66, "condition": "Clear", "wind": 5.0, "wind_direction": 240.0, "humidity": 65.0, "pressure_hpa": 1013.2, "uv_index": 4.0, "heat_index": 66, "feels_like": 66}
 
     base_t = curr_obs["temp"]
     calibrated_hourly = []
@@ -701,6 +712,7 @@ def fetch_comprehensive_weather(lat: float, lon: float):
                 "temp": adjusted_temp,
                 "condition": item["condition"],
                 "rain_chance": item["rain_chance"],
+                "pressure": item.get("pressure", 1013.0),
                 "is_night": item["is_night"],
                 "wind_mph": item.get("wind_mph", 5.0)
             })
@@ -716,6 +728,7 @@ def fetch_comprehensive_weather(lat: float, lon: float):
                 "temp": c_temp,
                 "condition": "Clear" if is_night else "Sunny",
                 "rain_chance": 0 if h < 24 else 10,
+                "pressure": 1013.0,
                 "is_night": is_night,
                 "wind_mph": 5.0
             })
@@ -807,6 +820,8 @@ def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC St
     curr_hum = live["humidity"]
     curr_heat_index = live.get("heat_index", curr_temp)
     curr_feels_like = live.get("feels_like", curr_heat_index)
+    curr_pressure = live.get("pressure_hpa", 1013.2)
+    curr_uv = live.get("uv_index", 4.0)
     is_coast = is_coastal_region(lat, lon)
 
     dew_point = round(curr_temp - ((100 - curr_hum) / 5))
@@ -825,6 +840,7 @@ def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC St
 
     tonight_low = daily_list[0]["low"]
     today_high = daily_list[0]["high"]
+    next_day_rain = daily_list[1]["rain_prob_max"] if len(daily_list) > 1 else 0
 
     encoded_label = urllib.parse.quote(location_name)
     radar_url = f"/radar?lat={round(lat, 4)}&lon={round(lon, 4)}&label={encoded_label}&wind_speed={curr_wind}&wind_dir={curr_wind_dir}"
@@ -892,6 +908,122 @@ def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC St
         }
     }
 
+    # 1. Car Wash Index
+    car_wash_score = max(20, min(99, round(98 - (max_rain_6h * 0.6) - (next_day_rain * 0.35) - (avg_wind_6h * 0.5))))
+    car_wash_note = (
+        "Optimal wash & wax window. Clear road conditions with zero rain interference expected for 48 hours."
+        if car_wash_score >= 80 else
+        "Acceptable for a quick rinse. Spotty precipitation possible over the next 24-48 hours."
+        if car_wash_score >= 55 else
+        "Hold off on washing. Elevated rain chance will cause dirty road splashback and spot residue."
+    )
+
+    # 2. Dog Walking & Paw Safety Index
+    is_day = not (now.hour < 7 or now.hour >= 19)
+    estimated_pavement_f = round(curr_temp + (25 if (is_day and curr_uv > 3.0) else 5))
+    paw_burn_risk = estimated_pavement_f >= 120
+    dog_walk_score = max(25, min(99, round(96 - (max(0, curr_temp - 82) * 1.5) - (rain_penalty * 0.8) - (15 if paw_burn_risk else 0))))
+    dog_walk_details = (
+        f"🐕 Canine Comfort: Air {curr_temp}°F | Est. Asphalt {estimated_pavement_f}°F.\n"
+        f"• {'⚠️ Caution: Pavement surface exceeds 120°F. Walk pets on grass or turf to prevent paw burns.' if paw_burn_risk else 'Safe pavement temperatures for extended walks.'}\n"
+        f"• {'Dry paths with minimal mud risk.' if max_rain_6h < 20 else 'Pack a towel for damp paws upon return.'}"
+    )
+
+    # 3. Outdoor Dining & Patio Index
+    patio_base = 98 - abs(curr_temp - 74) * 1.6 - (avg_wind_6h * 1.4) - (max_rain_6h * 0.6)
+    patio_score = max(30, min(99, round(patio_base)))
+    patio_details = (
+        f"🍷 Patio & Deck Comfort: Ambient {curr_temp}°F with {avg_wind_6h} mph breeze.\n"
+        f"• {'Prime outdoor dining environment; pleasant atmospheric warmth with minimal breeze disturbance.' if patio_score >= 75 else 'Brisk or breezy patio dining; light layers or heat lamps recommended.' if curr_temp < 68 or avg_wind_6h > 12 else 'Midday heat elevated; shaded seating strongly recommended.'}\n"
+        f"• Rain ceiling over next 6 hours: {max_rain_6h}%."
+    )
+
+    # 4. Mosquito & Biting Insect Index
+    mosquito_risk_score = min(98, max(15, round((curr_hum * 0.6) + (max(0, curr_temp - 55) * 0.7) - (curr_wind * 1.8))))
+    mosquito_details = (
+        f"🦟 Insect Activity: Hazard Score {mosquito_risk_score}/100.\n"
+        f"• {'High biting midge and mosquito flight pressure around shaded turf and marsh edges due to high humidity (' + str(curr_hum) + '%).' if mosquito_risk_score >= 70 else 'Moderate insect activity; light repellent recommended for dawn/dusk intervals.' if mosquito_risk_score >= 45 else 'Low insect activity; breezy conditions and cooler temperatures suppress flight.'}\n"
+        f"• Peak activity window: Dawn (6:00-7:30 AM) and Twilight (6:30-8:00 PM)."
+    )
+
+    # 5. Sinus, Joint & Migraine Pressure Index
+    press_swing = abs(curr_pressure - (hourly_36[min(6, len(hourly_36)-1)].get("pressure", curr_pressure)))
+    headache_score = max(30, min(96, round(92 - (press_swing * 4.5) - (abs(curr_hum - 50) * 0.25))))
+    sinus_details = (
+        f"🧠 Barometric & Biometric Impact: Current Barometer {curr_pressure} hPa.\n"
+        f"• {'Stable atmospheric pressure gradient; low probability of weather-triggered migraines or arthritic joint flare-ups.' if press_swing < 3.0 else 'Active barometric fluctuation (' + str(round(press_swing, 1)) + ' hPa shift). Individuals sensitive to pressure changes may experience sinus congestion or headaches.'}\n"
+        f"• Dew point holds near {dew_point}°F."
+    )
+
+    # 6. UV Radiation & Sunscreen Burn Time
+    burn_time_min = round(200 / max(1.0, curr_uv)) if curr_uv > 0 else 999
+    burn_str = f"~{burn_time_min} minutes for unprotected fair skin" if curr_uv >= 3.0 else "Minimal burn danger without direct prolonged exposure"
+
+    # 7. Natural Home Ventilation & HVAC Guidance
+    hvac_score = 92 if (62 <= curr_temp <= 74 and curr_hum < 65 and max_rain_6h < 20) else (65 if (55 <= curr_temp <= 80) else 40)
+    hvac_details = (
+        f"🏡 Fresh Air Ventilation Index: Score {hvac_score}/100.\n"
+        f"• {'Prime conditions to open windows and naturally ventilate home; outdoor air is crisp and comfortable with low dust.' if hvac_score >= 80 else 'Keep windows closed and cycle HVAC. Outdoor humidity (' + str(curr_hum) + '%) will introduce moisture into indoor living spaces.' if curr_hum > 75 else 'Moderate conditions. Screen ventilation acceptable during midday hours.'}"
+    )
+
+    # 8. Foliage Progression
+    if lat >= 42.0 or elev_ft >= 3000:
+        foliage_text = "🍁 Hardwoods (Maple, Birch, Beech) at 60–85% peak vibrant red and amber transformation. Prime leaf-peeping window."
+    elif lat >= 35.0:
+        foliage_text = "🍂 River Canopies & Upland Oaks displaying 20–40% early bronze and yellow transitions. Peak coloration advancing in 2–3 weeks."
+    else:
+        foliage_text = "🌿 Coastal maritime live oaks and pines retain green canopy; cypress fringes displaying subtle bronze tints along freshwater banks."
+
+    lifestyle = {
+        "clothing": {
+            "morning": f"🌅 Morning ({tonight_low}°F): Crisp start. Light fleece, sweater, or layered hoodie suggested.",
+            "afternoon": f"☀️ Afternoon ({today_high}°F): Mild sun. Comfortable breathable cottons, light long sleeves, or casual chinos.",
+            "night": f"🌙 Night ({tonight_low}°F): Cool drop. Medium layer or light windbreaker for evening outdoor events.",
+        },
+        "hair_makeup": {
+            "hair_frizz_index": f"Elevated ({curr_hum}% RH / Dew point {dew_point}°F). {'Silicone anti-humidity serum, smoothing oil, or sleek updos strongly recommended.' if curr_hum > 75 else 'Standard hold styling product will maintain integrity.' if curr_hum > 50 else 'Low humidity; hydrating leave-in conditioner recommended.'}",
+            "makeup_finish_index": f"Dew point {dew_point}°F: {'High atmospheric moisture — oil-controlling matte primer and setting spray recommended.' if curr_hum > 75 or dew_point >= 65 else 'Balanced atmospheric moisture — hydrating base and standard foundation hold well.' if dew_point >= 50 else 'Crisp, dry air — hydrating moisturizer and luminous finish prevent flaking.'}"
+        },
+        "car_wash_index": {
+            "score": car_wash_score,
+            "details": f"🚗 Vehicle Care: Score {car_wash_score}/100.\n• {car_wash_note}\n• Next 6-hour rain risk: {max_rain_6h}% | Tomorrow: {next_day_rain}%."
+        },
+        "dog_walking": {
+            "score": dog_walk_score,
+            "details": dog_walk_details
+        },
+        "outdoor_dining": {
+            "score": patio_score,
+            "details": patio_details
+        },
+        "mosquito_and_insect": {
+            "score": mosquito_risk_score,
+            "details": mosquito_details
+        },
+        "allergens_and_pollen": {
+            "ragweed_and_weed_pollen": "Moderate along sunny roadsides and open fields",
+            "grass_pollen": "Low to moderate",
+            "tree_pollen": "Minimal / Dormant seasonal phase",
+            "mold_spores": "Elevated near damp soil and unpaved corridors" if curr_hum > 75 else "Low",
+            "air_quality_pm25": f"{live_aqi.get('category', 'Good')} (AQI {live_aqi.get('value', 35)} • PM2.5 {live_aqi.get('pm25', 8.0)} µg/m³)"
+        },
+        "sinus_and_migraine": {
+            "score": headache_score,
+            "details": sinus_details
+        },
+        "sun_and_uv_protection": {
+            "max_uv_rating": f"Index {curr_uv:.1f} ({'Low' if curr_uv < 3 else 'Moderate' if curr_uv < 6 else 'Very High'})",
+            "fair_skin_burn_time": burn_str,
+            "recommended_protection": "Broad-spectrum SPF 30+ & UV400 sunglasses recommended during midday peak (11 AM - 3 PM)" if curr_uv >= 3 else "Minimal sunscreen required for short exposures"
+        },
+        "home_and_energy": {
+            "score": hvac_score,
+            "details": hvac_details
+        },
+        "leaf_change": foliage_text,
+        "planting_harvest": garden_season
+    }
+
     if max_rain_6h >= 40:
         boundary_desc = f"Unsettled boundary layer: active precipitation potential ({max_rain_6h}% peak over 6h)."
     elif curr_wind >= 14:
@@ -913,7 +1045,7 @@ def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC St
             "wind": curr_wind,
             "condition": curr_cond,
             "is_night": (now.hour < 7 or now.hour >= 19),
-            "uv_index": 0.0 if (now.hour < 7 or now.hour >= 19) else (4.0 if elev_ft < 4000 else 6.5),
+            "uv_index": curr_uv,
             "sunrise": sunrise,
             "sunset": sunset,
             "moon_rise": "08:15 PM",
@@ -937,21 +1069,7 @@ def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC St
             "drought_index": f"{drought_source}: Status: None to Normal Soil Moisture Profile. Regional watershed displays normal baseline moisture reserves with seasonal precipitation totals sustaining stable hydrology."
         },
         "outdoor_activities": outdoor_activities,
-        "lifestyle": {
-            "clothing": {
-                "morning": f"🌅 Morning ({tonight_low}°F): Crisp start. Light fleece, sweater, or layered hoodie suggested.",
-                "afternoon": f"☀ Afternoon ({today_high}°F): Mild sun. Comfortable breathable cottons, light long sleeves, or casual chinos.",
-                "night": f"🌙 Night ({tonight_low}°F): Cool drop. Medium layer or light windbreaker for evening outdoor events.",
-            },
-            "hair_makeup": {
-                "hair": f"💇 Frizz Index: {'Elevated' if curr_hum > 75 else 'Moderate'} ({curr_hum}% RH / Dew point {dew_point}°F). {'Silicone anti-humidity serum or sleek styles recommended.' if curr_hum > 75 else 'Standard hold styling product will maintain integrity.'}",
-                "makeup": f"💄 Makeup Finish (Dew point {dew_point}°F): {'High atmospheric moisture—oil-controlling matte primer recommended.' if curr_hum > 75 else 'Balanced moisture. Standard hydrating foundation holds well.'}",
-            },
-            "allergen": "🌾 Pollen & Air: Seasonal ragweed and grass counts moderate along open corridors; tree and mold spores low.",
-            "mosquito_fly": f"🦟 Insect Activity: {'Active near sheltered vegetation around dusk due to humidity (' + str(curr_hum) + '%).' if curr_hum > 70 and curr_temp >= 60 else 'Low; cooler evening air suppresses insect flight.'}",
-            "leaf_change": "🍁 Foliage Status: Deciduous hardwood canopies displaying seasonal transitions. Peak coloration advancing across northern and montane sectors.",
-            "planting_harvest": garden_season,
-        },
+        "lifestyle": lifestyle,
         "sporting_event": {"events": sports_events},
         "astronomy": {
             "sunrise": sunrise,
@@ -1138,12 +1256,10 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
         let isPlaying = true;
         let timer = null;
 
-        // Calculate genuine storm motion vector for progressive future advection
         const stormSpeedMph = Math.max(16, windSpeedMph * 1.4);
-        const stormHeadingDeg = (windDirDeg + 180) % 360; // downwind trajectory
+        const stormHeadingDeg = (windDirDeg + 180) % 360;
         const headingRad = stormHeadingDeg * Math.PI / 180;
         
-        // At zoom 8, ~500m per pixel. In 10 min, ~10 pixels drift along storm track
         const pixelsPer10Min = Math.max(8, (stormSpeedMph * 0.447 * 600) / 480);
         const stepDx = Math.round(pixelsPer10Min * Math.sin(headingRad));
         const stepDy = Math.round(-pixelsPer10Min * Math.cos(headingRad));
@@ -1178,7 +1294,6 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
 
                 liveIndex = past.length - 1;
 
-                // Build 12 dynamic, non-static prediction frames (10m to 120m)
                 for (let step = 1; step <= 12; step++) {{
                     const futureTime = lastPast.time + (step * 600);
                     const minuteOffset = step * 10;

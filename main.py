@@ -12,7 +12,6 @@ async def main(page: ft.Page):
     latest_weather_data = {}
     current_selected_category = ["weather_climate"]
 
-    # Header with Moose image served directly from root assets
     app_header = ft.Container(
         content=ft.Row([
             ft.Container(
@@ -36,7 +35,6 @@ async def main(page: ft.Page):
         alignment=ft.Alignment(0, 0)
     )
 
-    # 2x2 Photorealistic Widget Controls
     widget_loc_text = ft.Text("No location selected", size=13, weight=ft.FontWeight.W_600, color="amber200")
     widget_condition_text = ft.Text("Enter location or tap 📍", size=14, color="grey300", weight=ft.FontWeight.W_500)
     widget_hero_icon = ft.Icon(ft.Icons.WB_SUNNY, size=62, color="amber300")
@@ -46,7 +44,6 @@ async def main(page: ft.Page):
     widget_uv_badge = ft.Text("☀️ UV --", size=11, color="orange200", weight=ft.FontWeight.BOLD)
     widget_aqi_badge = ft.Text("🍃 AQI --", size=11, color="green300", weight=ft.FontWeight.BOLD)
 
-    # Clean, mobile-friendly input dimensions
     location_input = ft.TextField(
         label="Location (Address, City, or ZIP)",
         hint_text="e.g. Wilmington, NC or 28412",
@@ -85,7 +82,6 @@ async def main(page: ft.Page):
     current_precip_text = ft.Text("Precip Now: --% | Next 24h Max: --%", size=14, color="cyan300", weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
     rain_duration_text = ft.Text("Awaiting location input.", size=13, color="amber100", text_align=ft.TextAlign.CENTER)
 
-    # Interactive Live Doppler Radar Section
     radar_timestamp_text = ft.Text("🟢 Live Radar Scan • Synced", size=11, color="green300", weight=ft.FontWeight.W_600)
 
     radar_button_widget = ft.Container(
@@ -265,26 +261,7 @@ async def main(page: ft.Page):
         for key, val in cat_data.items():
             title = key.replace("_", " ").title()
 
-            if isinstance(val, dict) and "score" in val:
-                score = val.get("score", "--")
-                details = val.get("details", "")
-                card = ft.Container(
-                    content=ft.Column([
-                        ft.Row([
-                            ft.Text(title, size=15, weight=ft.FontWeight.BOLD, color="amber300"),
-                            ft.Text(f"Score: {score}/100", size=13, weight=ft.FontWeight.BOLD, color="green300")
-                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        ft.Divider(height=6, color="grey800"),
-                        ft.Row([
-                            ft.Text("Details: ", size=12, weight=ft.FontWeight.BOLD, color="grey400"),
-                            ft.Text(details, size=12, color="white", expand=True)
-                        ], vertical_alignment=ft.CrossAxisAlignment.START)
-                    ], spacing=6),
-                    bgcolor="#252830", border_radius=8, padding=12
-                )
-                cards.append(card)
-
-            elif key == "clothing" and isinstance(val, dict):
+            if key == "clothing" and isinstance(val, dict):
                 clothing_rows = [
                     ft.Text("Clothing Recommendations", size=15, weight=ft.FontWeight.BOLD, color="amber300"),
                     ft.Divider(height=6, color="grey800")
@@ -309,14 +286,78 @@ async def main(page: ft.Page):
                     ft.Text("Hair & Makeup Outlook", size=15, weight=ft.FontWeight.BOLD, color="amber300"),
                     ft.Divider(height=6, color="grey800")
                 ]
+                labels = {
+                    "hair": ("💇 Hair Frizz Index", "amber300"),
+                    "hair_frizz_index": ("💇 Hair Frizz Index", "amber300"),
+                    "makeup": ("💄 Makeup Finish", "#ff80ab"),
+                    "makeup_finish_index": ("💄 Makeup Finish", "#ff80ab"),
+                }
                 for subk, subv in val.items():
+                    tag_name, tag_color = labels.get(subk, (subk.replace('_', ' ').title(), "amber300"))
                     hm_items.append(
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Container(
+                                    content=ft.Text(tag_name, size=11, weight=ft.FontWeight.BOLD, color="black"),
+                                    bgcolor=tag_color,
+                                    padding=ft.Padding(8, 4, 8, 4),
+                                    border_radius=6,
+                                    width=150,
+                                    alignment=ft.Alignment(0, 0)
+                                ),
+                                ft.Text(str(subv), size=12, color="white", expand=True)
+                            ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                            bgcolor="#1c1f26", padding=8, border_radius=6
+                        )
+                    )
+                cards.append(ft.Container(content=ft.Column(hm_items, spacing=8), bgcolor="#252830", border_radius=8, padding=12))
+
+            elif isinstance(val, dict) and "score" in val:
+                score = val.get("score", "--")
+                details = val.get("details", "")
+                card = ft.Container(
+                    content=ft.Column([
                         ft.Row([
-                            ft.Text(f"{subk.capitalize()}: ", size=12, weight=ft.FontWeight.BOLD, color="amber200"),
-                            ft.Text(str(subv), size=12, color="white", expand=True)
+                            ft.Text(title, size=15, weight=ft.FontWeight.BOLD, color="amber300"),
+                            ft.Text(f"Score: {score}/100", size=13, weight=ft.FontWeight.BOLD, color="green300")
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Divider(height=6, color="grey800"),
+                        ft.Row([
+                            ft.Text("Details: ", size=12, weight=ft.FontWeight.BOLD, color="grey400"),
+                            ft.Text(details, size=12, color="white", expand=True)
+                        ], vertical_alignment=ft.CrossAxisAlignment.START)
+                    ], spacing=6),
+                    bgcolor="#252830", border_radius=8, padding=12
+                )
+                cards.append(card)
+
+            elif key in ["allergens_and_pollen", "sun_and_uv_protection"] and isinstance(val, dict):
+                sec_title = "Allergens & Pollen Spectrum" if key == "allergens_and_pollen" else "UV Radiation & Sun Protection"
+                items = [
+                    ft.Text(sec_title, size=15, weight=ft.FontWeight.BOLD, color="amber300"),
+                    ft.Divider(height=6, color="grey800")
+                ]
+                for sk, sv in val.items():
+                    clean_label = sk.replace("_", " ").title()
+                    items.append(
+                        ft.Row([
+                            ft.Text(f"{clean_label}: ", size=12, weight=ft.FontWeight.BOLD, color="amber200"),
+                            ft.Text(str(sv), size=12, color="white", expand=True)
                         ], vertical_alignment=ft.CrossAxisAlignment.START)
                     )
-                cards.append(ft.Container(content=ft.Column(hm_items, spacing=6), bgcolor="#252830", border_radius=8, padding=12))
+                cards.append(ft.Container(content=ft.Column(items, spacing=6), bgcolor="#252830", border_radius=8, padding=12))
+
+            elif key == "leaf_change":
+                cards.append(
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Text("Autumn Foliage Progression", size=15, weight=ft.FontWeight.BOLD, color="amber300"),
+                            ft.Divider(height=6, color="grey800"),
+                            ft.Text(str(val), size=12, color="white")
+                        ], spacing=6),
+                        bgcolor="#252830", border_radius=8, padding=12
+                    )
+                )
 
             elif key == "events" and isinstance(val, list):
                 event_cards = [
@@ -429,11 +470,13 @@ async def main(page: ft.Page):
                         ], vertical_alignment=ft.CrossAxisAlignment.START)
                     )
                 cards.append(ft.Container(content=ft.Column(col, spacing=6), bgcolor="#252830", border_radius=8, padding=12))
+
             elif isinstance(val, list):
                 col = [ft.Text(title, size=15, weight=ft.FontWeight.BOLD, color="amber300"), ft.Divider(height=6, color="grey800")]
                 for li in val:
                     col.append(ft.Text(f"• {str(li)}", size=12, color="white"))
                 cards.append(ft.Container(content=ft.Column(col, spacing=6), bgcolor="#252830", border_radius=8, padding=12))
+
             else:
                 cards.append(
                     ft.Container(
@@ -672,14 +715,12 @@ async def main(page: ft.Page):
     location_input.on_submit = load_weather_manual
     sports_input.on_submit = load_weather_manual
 
-    # Mobile-friendly search bar
     search_row = ft.Row([
         location_input,
         ft.IconButton(icon=ft.Icons.SEARCH, on_click=load_weather_manual, icon_color="amber300", tooltip="Search Location"),
         ft.IconButton(icon=ft.Icons.MY_LOCATION, on_click=handle_autodetect_click, icon_color="cyan300", tooltip="Auto-Detect My Location"),
     ], alignment=ft.MainAxisAlignment.CENTER, spacing=2)
 
-    # Perfectly Centered 2x2 Photorealistic Widget
     photorealistic_2x2_widget = ft.Container(
         width=330, height=330, border_radius=28, padding=20,
         alignment=ft.Alignment(0, 0),
@@ -713,7 +754,6 @@ async def main(page: ft.Page):
         ], spacing=4)
     )
 
-    # Feedback & Contact Actions
     praise_mailto = "mailto:thickmooseweather@gmail.com?subject=Thick%20Moose%20Weather%20-%20Suggestions%20%26%20Praise"
     complaints_mailto = "mailto:thickmooseweather@gmail.com?subject=Thick%20Moose%20Weather%20-%20Problems%20%26%20Complaints"
 
@@ -799,7 +839,6 @@ async def main(page: ft.Page):
 
     page.add(full_dashboard)
 
-    # Startup resolution: auto-detect default or restore manual preference
     try:
         loc_mode = await page.client_storage.get_async("tmw_location_mode")
         if loc_mode == "auto":
@@ -814,4 +853,3 @@ async def main(page: ft.Page):
 
 if __name__ == "__main__":
     ft.app(target=main, view=ft.AppView.WEB_BROWSER)
-    
