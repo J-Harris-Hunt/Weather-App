@@ -690,7 +690,7 @@ def fetch_comprehensive_weather(lat: float, lon: float):
                     curr_obs["wind"] = w_mph
                     curr_obs["humidity"] = hum_val
                     curr_obs["heat_index"] = heat_idx
-                    curr_obs["feels_like"] = heat_idx
+                    curr_feels_like = heat_idx
     except Exception:
         pass
 
@@ -1131,54 +1131,56 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
         }}
 
         .top-hud {{
-            position: absolute; top: 16px; left: 16px; right: 16px;
+            position: absolute; top: 12px; left: 12px; right: 12px;
             display: flex; justify-content: space-between; align-items: center;
             z-index: 1000; pointer-events: none;
         }}
         .hud-card {{
             background: rgba(26, 26, 26, 0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
             border: 1px solid rgba(255, 193, 7, 0.4); border-radius: 12px;
-            padding: 8px 14px; color: white; display: flex; align-items: center; gap: 10px;
+            padding: 6px 12px; color: white; display: flex; align-items: center; gap: 8px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.5); pointer-events: auto;
         }}
         .back-link {{
             color: #ffc107; text-decoration: none; font-size: 13px; font-weight: bold;
             display: flex; align-items: center; gap: 4px;
         }}
-        .hud-title {{ font-size: 13px; font-weight: 700; color: #fff; }}
+        .hud-title {{ font-size: 12px; font-weight: 700; color: #fff; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
 
         .legend-bar {{
-            display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; color: #aaa;
+            display: flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; color: #aaa;
         }}
         .legend-gradient {{
-            width: 100px; height: 8px; border-radius: 4px;
+            width: 70px; height: 7px; border-radius: 4px;
             background: linear-gradient(to right, #00e5ff, #00e676, #ffeb3b, #ff5722, #d500f9);
         }}
 
+        /* Responsive controls that never push slider off-screen */
         .controls {{
-            position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+            position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
             background: rgba(26, 26, 26, 0.94); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
             border: 1.5px solid rgba(255, 193, 7, 0.6); border-radius: 18px;
-            padding: 10px 18px; display: flex; align-items: center; gap: 12px; z-index: 1000;
-            color: white; box-shadow: 0 8px 30px rgba(0,0,0,0.7); max-width: 94vw; width: 520px;
+            padding: 7px 12px; display: flex; align-items: center; gap: 8px; z-index: 1000;
+            color: white; box-shadow: 0 8px 30px rgba(0,0,0,0.7);
+            width: calc(100% - 24px); max-width: 480px;
         }}
         .btn-ctrl {{
             background: #ffc107; color: #000; border: none; border-radius: 8px;
-            width: 36px; height: 36px; font-size: 14px; font-weight: bold;
+            width: 32px; height: 32px; font-size: 13px; font-weight: bold;
             display: flex; align-items: center; justify-content: center; cursor: pointer;
-            transition: all 0.15s ease;
+            flex-shrink: 0;
         }}
-        .btn-ctrl:hover {{ background: #ffe082; transform: scale(1.05); }}
+        .btn-ctrl:hover {{ background: #ffe082; }}
         .badge {{
-            padding: 5px 9px; border-radius: 8px; font-size: 11px; font-weight: 800; letter-spacing: 0.5px;
-            white-space: nowrap; text-align: center;
+            padding: 4px 7px; border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.5px;
+            white-space: nowrap; text-align: center; flex-shrink: 0; min-width: 50px;
         }}
         .badge-past {{ background: rgba(0, 229, 255, 0.2); color: #00e5ff; border: 1px solid #00e5ff; }}
         .badge-live {{ background: rgba(76, 175, 80, 0.25); color: #4caf50; border: 1px solid #4caf50; }}
         .badge-future {{ background: rgba(255, 193, 7, 0.25); color: #ffc107; border: 1px solid #ffc107; }}
-        .time-display {{ font-size: 13px; font-weight: 700; min-width: 82px; text-align: center; color: #fff; }}
+        .time-display {{ font-size: 12px; font-weight: 700; min-width: 58px; text-align: center; color: #fff; flex-shrink: 0; }}
         .timeline {{
-            flex: 1; cursor: pointer; accent-color: #ffc107; height: 6px;
+            flex: 1; min-width: 60px; cursor: pointer; accent-color: #ffc107; height: 6px;
         }}
 
         @keyframes radar-pulse {{
@@ -1204,7 +1206,7 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
             <div class="legend-bar">
                 <span>Rain</span>
                 <div class="legend-gradient"></div>
-                <span style="color:#ff5722">Severe</span>
+                <span style="color:#ff5722">Storm</span>
             </div>
         </div>
     </div>
@@ -1213,7 +1215,7 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
 
     <div class="controls">
         <button class="btn-ctrl" id="playBtn" onclick="togglePlay()">⏸</button>
-        <div id="statusBadge" class="badge badge-live">LIVE RADAR</div>
+        <div id="statusBadge" class="badge badge-live">LIVE</div>
         <div id="timeDisplay" class="time-display">--:--</div>
         <input type="range" id="slider" class="timeline" min="0" max="0" value="0" oninput="onSlider(this.value)">
     </div>
@@ -1336,7 +1338,7 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
                 play();
             }})
             .catch(() => {{
-                document.getElementById('timeDisplay').innerText = "Live Radar";
+                document.getElementById('timeDisplay').innerText = "Live";
             }});
 
         function showFrame(idx) {{
@@ -1369,10 +1371,10 @@ def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Lo
                 badge.innerText = 'PAST';
             }} else if (f.type === 'live') {{
                 badge.className = 'badge badge-live';
-                badge.innerText = 'LIVE RADAR';
+                badge.innerText = 'LIVE';
             }} else {{
                 badge.className = 'badge badge-future';
-                badge.innerText = `PREDICTED (+${{f.minuteOffset}}m)`;
+                badge.innerText = `+${{f.minuteOffset}}m`;
             }}
         }}
 

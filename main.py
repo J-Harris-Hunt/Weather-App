@@ -1,3 +1,5 @@
+import asyncio
+import inspect
 import flet as ft
 from datetime import datetime
 
@@ -12,29 +14,38 @@ async def main(page: ft.Page):
     latest_weather_data = {}
     current_selected_category = ["weather_climate"]
 
-    # Storage helper supporting both async and sync Flet ClientStorage APIs
+    # Bulletproof storage helpers that safely await coroutines returned by Flet
     async def storage_get(key: str):
         try:
             if hasattr(page.client_storage, "get_async"):
-                res = await page.client_storage.get_async(key)
+                res = page.client_storage.get_async(key)
+                if inspect.isawaitable(res):
+                    res = await res
                 if res is not None:
                     return res
         except Exception:
             pass
         try:
-            return page.client_storage.get(key)
+            res = page.client_storage.get(key)
+            if inspect.isawaitable(res):
+                res = await res
+            return res
         except Exception:
             return None
 
     async def storage_set(key: str, value: str):
         try:
             if hasattr(page.client_storage, "set_async"):
-                await page.client_storage.set_async(key, value)
+                res = page.client_storage.set_async(key, value)
+                if inspect.isawaitable(res):
+                    await res
                 return
         except Exception:
             pass
         try:
-            page.client_storage.set(key, value)
+            res = page.client_storage.set(key, value)
+            if inspect.isawaitable(res):
+                await res
         except Exception:
             pass
 
@@ -84,10 +95,11 @@ async def main(page: ft.Page):
     sports_input = ft.TextField(
         label="Enter Teams (e.g. Panthers, Braves, NC State)",
         value="Panthers, Braves, NC State",
-        width=220,
+        expand=True,
         border_color="amber300",
         focused_border_color="amber200",
-        dense=True
+        dense=True,
+        content_padding=ft.Padding(10, 10, 10, 10),
     )
 
     location_display_text = ft.Text("📍 Enter address or tap 📍 to auto-detect", size=14, color="cyan200", weight=ft.FontWeight.W_600)
@@ -277,7 +289,7 @@ async def main(page: ft.Page):
                     sports_input,
                     ft.IconButton(icon=ft.Icons.SEARCH, on_click=lambda e: page.run_task(load_weather_manual), icon_color="amber300", tooltip="Search Teams"),
                     ft.IconButton(icon=ft.Icons.TUNE, on_click=open_team_picker, icon_color="cyan300", tooltip="Choose from Team List")
-                ], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
+                ], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
                 bgcolor="#1c1f26", padding=8, border_radius=8
             )
             cards.append(search_box)
@@ -393,28 +405,41 @@ async def main(page: ft.Page):
                     ft.Divider(height=6, color="grey800")
                 ]
                 for ev in val:
-                    status_controls = []
                     game_score = ev.get("score", "")
+                    header_items = [
+                        ft.Text(ev.get("title", "Matchup"), size=14, weight=ft.FontWeight.BOLD, color="amber200", expand=True),
+                    ]
                     if game_score:
-                        status_controls.append(
+                        header_items.append(
                             ft.Container(
                                 content=ft.Text(f"📊 {game_score}", size=11, weight=ft.FontWeight.BOLD, color="black"),
                                 bgcolor="amber400",
                                 border_radius=6,
-                                padding=ft.Padding(7, 3, 7, 3)
+                                padding=ft.Padding(6, 2, 6, 2)
                             )
                         )
-                    status_controls.append(
-                        ft.Text(f"⏰ {ev.get('time', '')}", size=12, color="cyan200", weight=ft.FontWeight.W_600)
-                    )
 
+                    # Fully responsive portrait & landscape event card layout
                     card_content = [
+                        ft.Row(header_items, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                         ft.Row([
-                            ft.Text(ev.get("title", "Matchup"), size=14, weight=ft.FontWeight.BOLD, color="amber200", expand=True),
-                            ft.Row(status_controls, spacing=8, alignment=ft.MainAxisAlignment.END, vertical_alignment=ft.CrossAxisAlignment.CENTER)
-                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        ft.Text(f"📍 {ev.get('venue', '')}", size=12, color="grey300"),
-                        ft.Text(f"🌤️ {ev.get('conditions', '')}", size=12, color="green200", weight=ft.FontWeight.W_500),
+                            ft.Icon(ft.Icons.SCHEDULE, size=14, color="cyan200"),
+                            ft.Text(f"{ev.get('time', '')}", size=12, color="cyan200", weight=ft.FontWeight.W_500, expand=True)
+                        ], spacing=6),
+                        ft.Row([
+                            ft.Icon(ft.Icons.LOCATION_ON, size=14, color="grey400"),
+                            ft.Text(ev.get('venue', ''), size=12, color="grey300", expand=True)
+                        ], spacing=6),
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Icon(ft.Icons.WB_SUNNY, size=14, color="green300"),
+                                ft.Text(ev.get('conditions', ''), size=12, color="green200", weight=ft.FontWeight.W_500, expand=True)
+                            ], spacing=6),
+                            bgcolor="#16222f",
+                            border=ft.Border.all(1, "cyan900"),
+                            border_radius=6,
+                            padding=ft.Padding(8, 6, 8, 6)
+                        )
                     ]
 
                     alts = ev.get("alternatives", [])
@@ -438,8 +463,8 @@ async def main(page: ft.Page):
 
                     event_cards.append(
                         ft.Container(
-                            content=ft.Column(card_content, spacing=4),
-                            bgcolor="#1c1f26", padding=10, border_radius=6
+                            content=ft.Column(card_content, spacing=6),
+                            bgcolor="#1c1f26", padding=10, border_radius=8
                         )
                     )
                 cards.append(ft.Container(content=ft.Column(event_cards, spacing=8), bgcolor="#252830", border_radius=8, padding=12))
@@ -858,21 +883,23 @@ async def main(page: ft.Page):
 
     page.add(full_dashboard)
 
-    # Startup resolution: restore teams, then evaluate persistent location mode
+    # Delay slightly to allow the client WebSocket to synchronize localStorage
+    await asyncio.sleep(0.15)
+
     saved_teams = await storage_get("tmw_saved_teams")
     if saved_teams:
         sports_input.value = saved_teams
         page.update()
 
     loc_mode = await storage_get("tmw_location_mode")
+    saved_loc = await storage_get("tmw_saved_location")
+
     if loc_mode == "auto":
         await auto_detect_gps()
-    elif loc_mode == "manual":
-        saved_loc = await storage_get("tmw_saved_location")
-        if saved_loc:
-            location_input.value = saved_loc
-            page.update()
-            await load_weather(is_auto=False)
+    elif loc_mode == "manual" and saved_loc:
+        location_input.value = saved_loc
+        page.update()
+        await load_weather(is_auto=False)
 
 if __name__ == "__main__":
     ft.app(target=main, view=ft.AppView.WEB_BROWSER)
