@@ -690,7 +690,7 @@ def fetch_comprehensive_weather(lat: float, lon: float):
                     curr_obs["wind"] = w_mph
                     curr_obs["humidity"] = hum_val
                     curr_obs["heat_index"] = heat_idx
-                    curr_obs["feels_like"] = heat_idx
+                    curr_feels_like = heat_idx
     except Exception:
         pass
 
@@ -1111,7 +1111,7 @@ def get_manifest():
     raise HTTPException(status_code=404, detail="Manifest not found")
 
 @app.get("/radar", response_class=HTMLResponse)
-def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Location", **kwargs):
+def get_radar_page(lat: float = 34.1378, lon: float = -77.9150, label: str = "Location"):
     return f"""<!DOCTYPE html>
 <html>
 <head>

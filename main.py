@@ -14,37 +14,36 @@ async def main(page: ft.Page):
     latest_weather_data = {}
     current_selected_category = ["weather_climate"]
 
+    # Storage access guarded with a strict timeout to prevent WebSocket handshake stalls
     async def storage_get(key: str):
         try:
-            if hasattr(page.client_storage, "get_async"):
-                res = page.client_storage.get_async(key)
+            async def _inner():
+                if hasattr(page.client_storage, "get_async"):
+                    res = page.client_storage.get_async(key)
+                    if inspect.isawaitable(res):
+                        res = await res
+                    if res is not None:
+                        return res
+                res = page.client_storage.get(key)
                 if inspect.isawaitable(res):
                     res = await res
-                if res is not None:
-                    return res
-        except Exception:
-            pass
-        try:
-            res = page.client_storage.get(key)
-            if inspect.isawaitable(res):
-                res = await res
-            return res
+                return res
+            return await asyncio.wait_for(_inner(), timeout=0.4)
         except Exception:
             return None
 
     async def storage_set(key: str, value: str):
         try:
-            if hasattr(page.client_storage, "set_async"):
-                res = page.client_storage.set_async(key, value)
+            async def _inner():
+                if hasattr(page.client_storage, "set_async"):
+                    res = page.client_storage.set_async(key, value)
+                    if inspect.isawaitable(res):
+                        await res
+                    return
+                res = page.client_storage.set(key, value)
                 if inspect.isawaitable(res):
                     await res
-                return
-        except Exception:
-            pass
-        try:
-            res = page.client_storage.set(key, value)
-            if inspect.isawaitable(res):
-                await res
+            await asyncio.wait_for(_inner(), timeout=0.4)
         except Exception:
             pass
 
@@ -101,8 +100,8 @@ async def main(page: ft.Page):
         content_padding=ft.Padding(10, 10, 10, 10),
     )
 
-    location_display_text = ft.Text("📍 Enter address or tap 📍 to auto-detect", size=14, color="cyan200", weight=ft.FontWeight.W_600)
-    condition_text = ft.Text("Ready for location", size=18, weight=ft.FontWeight.BOLD, color="amber200")
+    location_display_text = ft.Text("📍 Detecting local forecast...", size=14, color="cyan200", weight=ft.FontWeight.W_600)
+    condition_text = ft.Text("Loading weather...", size=18, weight=ft.FontWeight.BOLD, color="amber200")
     hero_weather_icon = ft.Icon(ft.Icons.WB_SUNNY, size=64, color="amber300")
     curr_temp_text = ft.Text("--°F", size=48, weight=ft.FontWeight.BOLD, color="white")
     feels_like_text = ft.Text("Feels Like: --°F", size=14, color="grey300")
@@ -117,7 +116,7 @@ async def main(page: ft.Page):
     moonset_text = ft.Text("🌑 Moonset: --:-- AM", size=13, color="cyan200", weight=ft.FontWeight.W_600)
 
     current_precip_text = ft.Text("Precip Now: --% | Next 24h Max: --%", size=14, color="cyan300", weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
-    rain_duration_text = ft.Text("Awaiting location input.", size=13, color="amber100", text_align=ft.TextAlign.CENTER)
+    rain_duration_text = ft.Text("Retrieving local radar & metrics...", size=13, color="amber100", text_align=ft.TextAlign.CENTER)
 
     radar_timestamp_text = ft.Text("🟢 Live Radar Scan • Synced", size=11, color="green300", weight=ft.FontWeight.W_600)
 
@@ -130,7 +129,7 @@ async def main(page: ft.Page):
         border_radius=10,
         padding=ft.Padding(16, 10, 16, 10),
         ink=True,
-        url="/radar?lat=38.8951&lon=-77.0364&label=Location",
+        url="/radar?lat=34.1378&lon=-77.9150&label=Location",
     )
 
     radar_container = ft.Container(
@@ -593,11 +592,10 @@ async def main(page: ft.Page):
 
     async def auto_detect_gps():
         import server
-        client_ip = getattr(page, "client_ip", None)
         location_display_text.value = "📍 Detecting location..."
         page.update()
         try:
-            detected_loc, lat, lon, loc_label = server.auto_detect_location(client_ip)
+            detected_loc, lat, lon, loc_label = await asyncio.to_thread(server.auto_detect_location)
             if detected_loc:
                 location_input.value = detected_loc
                 page.update()
@@ -626,7 +624,7 @@ async def main(page: ft.Page):
 
         try:
             import server
-            res = server.get_full_weather_data(query=loc, sport_team=teams)
+            res = await asyncio.to_thread(server.get_full_weather_data, loc, teams)
             name = res.get("location_name", loc)
 
             latest_weather_data.clear()
@@ -880,8 +878,7 @@ async def main(page: ft.Page):
 
     page.add(full_dashboard)
 
-    await asyncio.sleep(0.15)
-
+    # Initial boot sequence: load saved sports teams, check storage mode, or run auto-detect
     saved_teams = await storage_get("tmw_saved_teams")
     if saved_teams:
         sports_input.value = saved_teams
@@ -890,8 +887,6 @@ async def main(page: ft.Page):
     loc_mode = await storage_get("tmw_location_mode")
     saved_loc = await storage_get("tmw_saved_location")
 
-    # If the user explicitly typed and saved a manual location, load it.
-    # In all other cases (auto mode, initial visit, or session restart), auto-detect immediately.
     if loc_mode == "manual" and saved_loc and saved_loc.strip():
         location_input.value = saved_loc.strip()
         page.update()
@@ -901,3 +896,4 @@ async def main(page: ft.Page):
 
 if __name__ == "__main__":
     ft.app(target=main, view=ft.AppView.WEB_BROWSER)
+    
