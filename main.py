@@ -89,7 +89,7 @@ async def main(page: ft.Page):
                 ft.Text("Hyper-Local Microclimate Intelligence", size=12, color="cyan200", weight=ft.FontWeight.W_500),
             ], spacing=2),
         ], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        padding=ft.Padding(0, 10, 0, 8),
+        padding=ft.Padding(0, 10, 0, 12),
         alignment=ft.Alignment(0, 0)
     )
 
@@ -159,28 +159,31 @@ async def main(page: ft.Page):
     )
     page.overlay.append(donation_dialog)
 
-    # Clickable Header Banner / Icon
+    # Clickable Banner / Pill Badge (Anchored in Footer)
     keep_weather_free_badge = ft.Container(
         content=ft.Row([
             ft.Container(
                 content=ft.Image(
                     src="/donation_dog.png",
-                    width=38,
-                    height=38,
+                    width=42,
+                    height=42,
                     fit="cover",
-                    border_radius=19,
-                    error_content=ft.Icon(ft.Icons.PETS, color="amber300", size=22),
+                    border_radius=21,
+                    error_content=ft.Icon(ft.Icons.PETS, color="amber300", size=24),
                 ),
                 border=ft.Border.all(1.5, "amber300"),
-                border_radius=20,
+                border_radius=22,
             ),
-            ft.Text("Keep Weather Free!!!", size=13, weight=ft.FontWeight.BOLD, color="amber300"),
-            ft.Icon(ft.Icons.VOLUNTEER_ACTIVISM, size=18, color="amber300"),
-        ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
+            ft.Column([
+                ft.Text("Keep Weather Free!!!", size=14, weight=ft.FontWeight.BOLD, color="amber300"),
+                ft.Text("Support Chief Forecast Officer & Ad-Free Ops", size=10, color="grey300"),
+            ], spacing=1),
+            ft.Icon(ft.Icons.VOLUNTEER_ACTIVISM, size=20, color="amber300"),
+        ], alignment=ft.MainAxisAlignment.CENTER, spacing=10),
         bgcolor="#18202d",
         border=ft.Border.all(1.5, "amber400"),
-        border_radius=22,
-        padding=ft.Padding(14, 6, 16, 6),
+        border_radius=24,
+        padding=ft.Padding(16, 8, 18, 8),
         ink=True,
         on_click=open_donation,
         tooltip="Support Thick Moose Weather — Keep it 100% Ad-Free",
@@ -950,13 +953,11 @@ async def main(page: ft.Page):
                 url=complaints_mailto,
             ),
         ], alignment=ft.MainAxisAlignment.CENTER, spacing=16),
-        padding=ft.Padding(0, 16, 0, 30),
+        padding=ft.Padding(0, 10, 0, 30),
     )
 
     full_dashboard = ft.Column([
         app_header,
-        ft.Row([keep_weather_free_badge], alignment=ft.MainAxisAlignment.CENTER),
-        ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
         ft.Row([photorealistic_2x2_widget], alignment=ft.MainAxisAlignment.CENTER),
         ft.Divider(height=15, color="grey800"),
         search_row,
@@ -992,6 +993,8 @@ async def main(page: ft.Page):
         ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
         category_display_container,
         ft.Divider(height=15, color="grey800"),
+        ft.Row([keep_weather_free_badge], alignment=ft.MainAxisAlignment.CENTER),
+        ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
         feedback_section,
     ], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
