@@ -136,7 +136,7 @@ async def main(page: ft.Page):
                 ft.Text(
                     "Weather should be free! Sharing it with the world in a neat and tidy 1 stop package, unfortunately, is not. "
                     "To keep this app AD FREE and with no Subscription or Purchase Price, please consider donating to the Thick Moose "
-                    "so he can continue providing premium hyper-local weather free of charge and ugly, disruptive ads."
+                    "so he can continue providing premium hyper-local weather free of charge and ugly, disruptive ads. "
                     "A percentage of your donation will go to help fund and scale emerging carbon removal technologies.",
                     size=12,
                     color="white",
