@@ -1428,7 +1428,12 @@ def api_weather(query: str = "", sport_team: str = "Panthers, Braves, NC State")
         return get_full_weather_data(query, sport_team)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
+@app.get("/.well-known/assetlinks.json")
+def get_assetlinks():
+    path = os.path.join(assets_dir, "assetlinks.json")
+    if os.path.exists(path):
+        return FileResponse(path, media_type="application/json")
+    raise HTTPException(status_code=404, detail="Assetlinks file not found")
 from main import main as flet_ui_main
 app.mount("/", flet_fastapi.app(flet_ui_main, assets_dir=assets_dir))
 
