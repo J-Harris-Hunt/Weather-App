@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.thickmooselabs.weather",
+        "sha256_cert_fingerprints": ["83:E8:96:4B:B8:37:58:7B:11:46:1D:B8:D8:22:A8:10:E8:8C:49:01:1F:92:07:25:F1:EC:B9:DF:CD:36:11:D3"]
+      }
+    }]
