@@ -880,7 +880,7 @@ async def main(page: ft.Page):
     search_row = ft.Row([
         location_input,
         ft.IconButton(icon=ft.Icons.SEARCH, on_click=load_weather_manual, icon_color="amber300", tooltip="Search Location"),
-        ft.IconButton(icon=ft.Icons.MY_LOCATION, on_click=auto_detect_gps, icon_color="cyan300", tooltip="Auto-detect location"),
+        ft.IconButton(icon=ft.Icons.MY_LOCATION, on_click=auto_detect_gps, icon_color="cyan300", tooltip="Auto-detect location")
     ], alignment=ft.MainAxisAlignment.CENTER, spacing=2)
 
     photorealistic_2x2_widget = ft.Container(
@@ -1001,24 +1001,21 @@ async def main(page: ft.Page):
         feedback_section,
     ], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
+    # Page startup sequence
     page.add(full_dashboard)
 
-    await asyncio.sleep(0.05)
-
-    saved_teams = await storage_get("tmw_saved_teams")
-    if saved_teams:
-        sports_input.value = saved_teams
-        page.update()
-
-    loc_mode = await storage_get("tmw_location_mode")
-    saved_loc = await storage_get("tmw_saved_location")
-
-    if loc_mode == "manual" and saved_loc and saved_loc.strip():
-        location_input.value = saved_loc.strip()
-        page.update()
+    # Initial load: try saved location or auto-detect, fallback to input value
+    try:
+        saved_loc = await page.client_storage.get_async("pinned_location")
+        if saved_loc:
+            location_input.value = str(saved_loc)
+            await load_weather(is_auto=False)
+        else:
+            await auto_detect_gps()
+    except Exception as boot_err:
+        print(f"Startup autodetect error: {boot_err}")
+        # Always guarantee weather loads on startup
         await load_weather(is_auto=False)
-    else:
-        await auto_detect_gps()
 
 if __name__ == "__main__":
     ft.app(target=main, view=ft.AppView.WEB_BROWSER)
