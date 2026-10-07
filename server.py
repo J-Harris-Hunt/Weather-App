@@ -78,42 +78,40 @@ WMO_CODE_MAP = {
 
 WILMINGTON_FALLBACK = ("28412", 34.1378, -77.9150, "Wilmington, NC (28412)")
 
+import requests
+
 def auto_detect_location(client_ip=None):
+    """
+    Returns a 4-element tuple expected by main.py:
+    (search_query, latitude, longitude, display_label)
+    """
+    CLOUD_HUBS = ["Ashburn", "Boardman", "Council Bluffs"]
+
     try:
         url = f"https://ipapi.co/{client_ip}/json/" if client_ip else "https://ipapi.co/json/"
-        resp = requests.get(url, timeout=3)
+        resp = requests.get(url, timeout=3.5, headers={"User-Agent": "ThickMooseWeather/1.0"})
+        
         if resp.status_code == 200:
             data = resp.json()
-            # If corporate gateway tunnels to DC, VA, or AL, fall back to home base
-            if data.get("region_code") in ["DC", "AL", "VA"]:
-                return {"city": "Wilmington", "region": "NC", "postal": "28412", "lat": 34.18, "lon": -77.92}
-            return {
-                "city": data.get("city", "Wilmington"),
-                "region": data.get("region_code", "NC"),
-                "postal": data.get("postal", "28412"),
-                "lat": float(data.get("latitude", 34.18)),
-                "lon": float(data.get("longitude", -77.92)),
-            }
-    except Exception:
-        pass
-    return {"city": "Wilmington", "region": "NC", "postal": "28412", "lat": 34.18, "lon": -77.92}
+            city = data.get("city") or "Wilmington"
+            region = data.get("region_code") or "NC"
+            postal = data.get("postal") or "28412"
+            lat = float(data.get("latitude", 34.18))
+            lon = float(data.get("longitude", -77.92))
 
-    try:
-        url = f"https://freeipapi.com/api/json/{ip_target}"
-        r = requests.get(url, headers=headers, timeout=3.5).json()
-        city = r.get("cityName", "")
-        region = r.get("regionName", "")
-        postal = r.get("zipCode", "")
-        lat = float(r.get("latitude", 0.0))
-        lon = float(r.get("longitude", 0.0))
-        if city and city.lower() != "ashburn":
-            loc_label = f"{city}, {region} ({postal})" if postal else f"{city}, {region}"
-            search_query = postal or f"{city}, {region}" or f"{lat:.4f},{lon:.4f}"
-            return search_query, lat, lon, loc_label
+            # If resolved to a cloud provider data center without a real client IP, fall back to home base
+            if city in CLOUD_HUBS and not client_ip:
+                return ("28412", 34.18, -77.92, "Wilmington, NC (28412)")
+
+            search_query = postal if postal else f"{city}, {region}"
+            display_label = f"{city}, {region} ({postal})" if postal else f"{city}, {region}"
+            
+            return (search_query, lat, lon, display_label)
     except Exception:
         pass
 
-    return WILMINGTON_FALLBACK
+    # Default 4-tuple fallback
+    return ("28412", 34.18, -77.92, "Wilmington, NC (28412)")
 
 def get_coordinates(query: str):
     clean_q = str(query).strip()
