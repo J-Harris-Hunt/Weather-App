@@ -41,35 +41,29 @@ async def main(page: ft.Page):
 
     async def storage_get(key: str):
         try:
-            async def _inner():
-                if hasattr(page.client_storage, "get_async"):
-                    res = page.client_storage.get_async(key)
+            storage = getattr(page, "shared_preferences", None) or getattr(page, "client_storage", None)
+            if storage:
+                method = getattr(storage, "get_async", None) or getattr(storage, "get", None)
+                if method:
+                    res = method(key)
                     if inspect.isawaitable(res):
-                        res = await res
-                    if res is not None:
-                        return res
-                res = page.client_storage.get(key)
-                if inspect.isawaitable(res):
-                    res = await res
-                return res
-            return await asyncio.wait_for(_inner(), timeout=0.35)
-        except Exception:
-            return None
+                        return await res
+                    return res
+        except Exception as e:
+            print(f"storage_get error: {e}")
+        return None
 
     async def storage_set(key: str, value: str):
         try:
-            async def _inner():
-                if hasattr(page.client_storage, "set_async"):
-                    res = page.client_storage.set_async(key, value)
+            storage = getattr(page, "shared_preferences", None) or getattr(page, "client_storage", None)
+            if storage:
+                method = getattr(storage, "set_async", None) or getattr(storage, "set", None)
+                if method:
+                    res = method(key, value)
                     if inspect.isawaitable(res):
                         await res
-                    return
-                res = page.client_storage.set(key, value)
-                if inspect.isawaitable(res):
-                    await res
-            await asyncio.wait_for(_inner(), timeout=0.35)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"storage_set error: {e}")
 
     app_header = ft.Container(
         content=ft.Row([
@@ -195,7 +189,7 @@ async def main(page: ft.Page):
     widget_condition_text = ft.Text("Enter location or tap 📍", size=14, color="grey300", weight=ft.FontWeight.W_500)
     widget_hero_icon = ft.Icon(ft.Icons.WB_SUNNY, size=62, color="amber300")
     widget_temp_text = ft.Text("--°", size=54, weight=ft.FontWeight.BOLD, color="white")
-    widget_hl_text = ft.Text("H: --°  L: --°", size=13, weight=ft.FontWeight.BOLD, color="amber100")
+    widget_hl_text = ft.Text("H: --°  L: --°", size=13, weight=ft.FontWeight.BOLD, color="amstorageber100")
     widget_rain_badge = ft.Text("💧 --% Precip", size=11, color="cyan200", weight=ft.FontWeight.BOLD)
     widget_uv_badge = ft.Text("☀️ UV --", size=11, color="orange200", weight=ft.FontWeight.BOLD)
     widget_aqi_badge = ft.Text("🍃 AQI --", size=11, color="green300", weight=ft.FontWeight.BOLD)
@@ -302,8 +296,8 @@ async def main(page: ft.Page):
         team_picker_dialog.open = False
         page.update()
         if location_input.value.strip():
-            mode = await storage_get("tmw_location_mode")
-            await load_weather(is_auto=(mode != "manual"))
+            mode = await storage_set("tmw_saved_location", location_input.value.strip())
+            await storage_set("tmw_location_mode", "manual")
 
     async def select_alt_team(alt_query):
         current_val = sports_input.value.strip()
@@ -319,8 +313,7 @@ async def main(page: ft.Page):
         sports_input.value = ", ".join(teams)
         page.update()
         if location_input.value.strip():
-            mode = await storage_get("tmw_location_mode")
-            await load_weather(is_auto=(mode != "manual"))
+    await load_weather(is_auto=False)
 
     popular_teams_data = [
         ("🏈 NFL", ["Carolina Panthers", "Dallas Cowboys", "Kansas City Chiefs", "Philadelphia Eagles"]),
@@ -713,7 +706,6 @@ async def main(page: ft.Page):
 
     async def auto_detect_gps(e=None):
         query = "28412"
-        display_label = "Wilmington, NC"
         try:
             client_ip = extract_client_ip(page)
             try:
@@ -723,19 +715,15 @@ async def main(page: ft.Page):
 
             if isinstance(res, (list, tuple)) and len(res) >= 4:
                 query = str(res[0])
-                display_label = str(res[3])
             elif isinstance(res, dict):
                 query = str(res.get("search_query") or res.get("postal") or "28412")
-                display_label = str(res.get("display_label") or "Wilmington, NC")
         except Exception as err:
-            print(f"Auto-detect error: {err}")
+            print(f"Auto-detect GPS error: {err}")
             query = "28412"
-            display_label = "Wilmington, NC"
 
-        # Assign query and trigger weather fetch immediately
         location_input.value = query
-        await page.client_storage.set_async("pinned_location", query)
-        await page.client_storage.set_async("location_mode", "auto")
+        await storage_set("tmw_saved_location", query)
+        await storage_set("tmw_location_mode", "auto")
         await load_weather(is_auto=True)
         page.update()
 
@@ -1016,7 +1004,7 @@ async def main(page: ft.Page):
     page.add(full_dashboard)
 
     try:
-        saved_loc = await page.client_storage.get_async("pinned_location")
+        saved_loc = await storage_get("tmw_saved_location")
         if saved_loc:
             location_input.value = str(saved_loc)
             await load_weather(is_auto=False)
