@@ -7,3 +7,4 @@ flet
 flet-web
 python-dotenv
 pydantic
+flet-geolocator
