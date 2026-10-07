@@ -78,33 +78,25 @@ WMO_CODE_MAP = {
 
 WILMINGTON_FALLBACK = ("28412", 34.1378, -77.9150, "Wilmington, NC (28412)")
 
-def auto_detect_location(client_ip: str = None):
-    ip_target = (client_ip or "").strip()
-    
-    if not ip_target or ip_target in ["127.0.0.1", "::1", "localhost", "None"] or ip_target.startswith(("10.", "172.16.", "192.168.")):
-        return WILMINGTON_FALLBACK
-
-    headers = {"User-Agent": "ThickMooseWeather/2.0 (contact@thickmooselabs.com)"}
-
+def auto_detect_location(client_ip=None):
     try:
-        url = f"http://ip-api.com/json/{ip_target}?fields=status,message,country,region,regionName,city,zip,lat,lon,hosting"
-        r = requests.get(url, headers=headers, timeout=3.5).json()
-        if r.get("status") == "success":
-            city = r.get("city", "")
-            region = r.get("region", "")
-            postal = r.get("zip", "")
-            lat = float(r.get("lat", 0.0))
-            lon = float(r.get("lon", 0.0))
-            is_hosting = r.get("hosting", False)
-
-            if is_hosting or city.lower() == "ashburn":
-                return WILMINGTON_FALLBACK
-
-            loc_label = f"{city}, {region} ({postal})" if postal else f"{city}, {region}"
-            search_query = postal or f"{city}, {region}" or f"{lat:.4f},{lon:.4f}"
-            return search_query, lat, lon, loc_label
+        url = f"https://ipapi.co/{client_ip}/json/" if client_ip else "https://ipapi.co/json/"
+        resp = requests.get(url, timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            # If corporate gateway tunnels to DC, VA, or AL, fall back to home base
+            if data.get("region_code") in ["DC", "AL", "VA"]:
+                return {"city": "Wilmington", "region": "NC", "postal": "28412", "lat": 34.18, "lon": -77.92}
+            return {
+                "city": data.get("city", "Wilmington"),
+                "region": data.get("region_code", "NC"),
+                "postal": data.get("postal", "28412"),
+                "lat": float(data.get("latitude", 34.18)),
+                "lon": float(data.get("longitude", -77.92)),
+            }
     except Exception:
         pass
+    return {"city": "Wilmington", "region": "NC", "postal": "28412", "lat": 34.18, "lon": -77.92}
 
     try:
         url = f"https://freeipapi.com/api/json/{ip_target}"

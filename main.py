@@ -1,23 +1,6 @@
 import asyncio
 import inspect
 import flet as ft
-import flet_geolocator as ftg
-
-async def on_auto_locate_click(e):
-    geo = ftg.Geolocator()
-    e.page.services.append(geo)
-    await e.page.update_async()
-
-    # Request device location permission
-    permission = await geo.request_permission_async()
-    if permission in [ftg.GeolocatorPermissionStatus.ALWAYS, ftg.GeolocatorPermissionStatus.WHILE_IN_USE]:
-        pos = await geo.get_current_position_async(
-            configuration=ftg.GeolocatorConfiguration(
-                accuracy=ftg.GeolocatorPositionAccuracy.HIGH
-            )
-        )
-        # Pass true device GPS coordinates to your weather resolution logic
-        await update_weather_for_coords(pos.latitude, pos.longitude)
 from datetime import datetime
 
 # Replace these with your live Stripe Payment Links from dashboard.stripe.com/payment-links
