@@ -726,10 +726,10 @@ async def main(page: ft.Page):
 
             # 4. Refresh weather data
             await load_weather(is_auto=True)
-            await page.update_async()
+            page.update()
         except Exception as err:
             print(f"Location detection error: {err}")
-            await page.update_async()
+            page.update()
 
     async def load_weather(is_auto=False):
         loc = location_input.value.strip()
