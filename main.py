@@ -712,24 +712,32 @@ async def main(page: ft.Page):
             await load_weather(is_auto=False)
 
     async def auto_detect_gps(e=None):
+        query = "28412"
+        display_label = "Wilmington, NC"
         try:
-            # 1. Extract visitor's real client IP from incoming proxy headers
             client_ip = extract_client_ip(page)
+            try:
+                res = server.auto_detect_location(client_ip)
+            except TypeError:
+                res = server.auto_detect_location()
 
-            # 2. Query location using visitor IP (resolves tester's actual city and postal ZIP)
-            query, lat, lon, display_label = server.auto_detect_location(client_ip)
-
-            # 3. Provide the 5-digit ZIP code (or lat,lon) so get_full_weather_data resolves instantly
-            location_input.value = query
-            await page.client_storage.set_async("pinned_location", query)
-            await page.client_storage.set_async("location_mode", "auto")
-
-            # 4. Trigger weather fetch
-            await load_weather(is_auto=True)
-            page.update()
+            if isinstance(res, (list, tuple)) and len(res) >= 4:
+                query = str(res[0])
+                display_label = str(res[3])
+            elif isinstance(res, dict):
+                query = str(res.get("search_query") or res.get("postal") or "28412")
+                display_label = str(res.get("display_label") or "Wilmington, NC")
         except Exception as err:
-            print(f"Location detection error: {err}")
-            page.update()
+            print(f"Auto-detect error: {err}")
+            query = "28412"
+            display_label = "Wilmington, NC"
+
+        # Assign query and trigger weather fetch immediately
+        location_input.value = query
+        await page.client_storage.set_async("pinned_location", query)
+        await page.client_storage.set_async("location_mode", "auto")
+        await load_weather(is_auto=True)
+        page.update()
 
     async def load_weather(is_auto=False):
         loc = location_input.value.strip()
@@ -1004,7 +1012,9 @@ async def main(page: ft.Page):
     # Page startup sequence
     page.add(full_dashboard)
 
-    # Initial load: try saved location or auto-detect, fallback to input value
+   # Page startup sequence
+    page.add(full_dashboard)
+
     try:
         saved_loc = await page.client_storage.get_async("pinned_location")
         if saved_loc:
@@ -1013,8 +1023,8 @@ async def main(page: ft.Page):
         else:
             await auto_detect_gps()
     except Exception as boot_err:
-        print(f"Startup autodetect error: {boot_err}")
-        # Always guarantee weather loads on startup
+        print(f"Startup boot error: {boot_err}")
+        location_input.value = "28412"
         await load_weather(is_auto=False)
 
 if __name__ == "__main__":
