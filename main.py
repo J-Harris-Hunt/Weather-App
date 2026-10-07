@@ -39,31 +39,35 @@ async def main(page: ft.Page):
                 return cip_str
         return ""
 
+    _SESSION_STORAGE = {}
+
     async def storage_get(key: str):
         try:
-            storage = getattr(page, "shared_preferences", None) or getattr(page, "client_storage", None)
-            if storage:
-                method = getattr(storage, "get_async", None) or getattr(storage, "get", None)
+            cs = getattr(page, "client_storage", None)
+            if cs:
+                method = getattr(cs, "get_async", None) or getattr(cs, "get", None)
                 if method:
                     res = method(key)
                     if inspect.isawaitable(res):
-                        return await res
-                    return res
+                        res = await res
+                    if res is not None:
+                        return res
         except Exception as e:
-            print(f"storage_get error: {e}")
-        return None
+            print(f"storage_get error ({key}): {e}")
+        return _SESSION_STORAGE.get(key)
 
     async def storage_set(key: str, value: str):
+        _SESSION_STORAGE[key] = value
         try:
-            storage = getattr(page, "shared_preferences", None) or getattr(page, "client_storage", None)
-            if storage:
-                method = getattr(storage, "set_async", None) or getattr(storage, "set", None)
+            cs = getattr(page, "client_storage", None)
+            if cs:
+                method = getattr(cs, "set_async", None) or getattr(cs, "set", None)
                 if method:
                     res = method(key, value)
                     if inspect.isawaitable(res):
                         await res
         except Exception as e:
-            print(f"storage_set error: {e}")
+            print(f"storage_set error ({key}): {e}")
 
     app_header = ft.Container(
         content=ft.Row([
@@ -698,16 +702,20 @@ async def main(page: ft.Page):
         await auto_detect_gps()
 
     async def load_weather_manual(e=None):
-        val = location_input.value.strip()
-        if val:
-            await storage_set("tmw_location_mode", "manual")
-            await storage_set("tmw_saved_location", val)
-            await load_weather(is_auto=False)
+        loc = location_input.value.strip()
+        if not loc:
+            return
+        # 1. Update UI and fetch weather immediately
+        await load_weather(is_auto=False)
+        # 2. Persist in storage safely in the background
+        await storage_set("tmw_saved_location", loc)
+        await storage_set("tmw_location_mode", "manual")
 
     async def auto_detect_gps(e=None):
         query = "28412"
+        display_label = "Wilmington, NC"
         try:
-            client_ip = extract_client_ip(page)
+            client_ip = getattr(page, "client_ip", None) or extract_client_ip(page)
             try:
                 res = server.auto_detect_location(client_ip)
             except TypeError:
@@ -715,13 +723,22 @@ async def main(page: ft.Page):
 
             if isinstance(res, (list, tuple)) and len(res) >= 4:
                 query = str(res[0])
+                display_label = str(res[3])
             elif isinstance(res, dict):
                 query = str(res.get("search_query") or res.get("postal") or "28412")
+                display_label = str(res.get("display_label") or "Wilmington, NC")
         except Exception as err:
-            print(f"Auto-detect GPS error: {err}")
+            print(f"auto_detect_gps error: {err}")
             query = "28412"
+            display_label = "Wilmington, NC"
 
+        # Update input box with resolved query
         location_input.value = query
+        
+        # 1. Update UI and fetch weather immediately
+        await load_weather(is_auto=True)
+        
+        # 2. Persist in storage safely
         await storage_set("tmw_saved_location", query)
         await storage_set("tmw_location_mode", "auto")
         await load_weather(is_auto=True)
@@ -1011,7 +1028,7 @@ async def main(page: ft.Page):
         else:
             await auto_detect_gps()
     except Exception as boot_err:
-        print(f"Startup boot error: {boot_err}")
+        print(f"Startup boot fallback: {boot_err}")
         location_input.value = "28412"
         await load_weather(is_auto=False)
 
