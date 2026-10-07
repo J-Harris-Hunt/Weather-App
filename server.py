@@ -1433,7 +1433,8 @@ async def serve_assetlinks():
         return FileResponse(path=str(assetlinks_path), media_type="application/json")
     return JSONResponse(status_code=404, content={"error": "assetlinks.json not found"})
 
-app.mount("/", flet_fastapi.app(main.main))
+assets_path = Path(__file__).resolve().parent / "assets"
+app.mount("/", flet_fastapi.app(main.main, assets_dir=str(assets_path)))
 
 if __name__ == "__main__":
     import uvicorn

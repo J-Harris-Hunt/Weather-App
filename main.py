@@ -711,24 +711,25 @@ async def main(page: ft.Page):
             await storage_set("tmw_saved_location", val)
             await load_weather(is_auto=False)
 
-    async def auto_detect_gps():
-        import server
-        location_display_text.value = "📍 Detecting location..."
-        page.update()
+    async def auto_detect_gps(e=None):
         try:
+            # 1. Extract visitor's real client IP from incoming proxy headers
             client_ip = extract_client_ip(page)
-            detected_loc, lat, lon, loc_label = await asyncio.to_thread(server.auto_detect_location, client_ip)
-            if detected_loc:
-                location_input.value = detected_loc
-                page.update()
-                await storage_set("tmw_location_mode", "auto")
-                await load_weather(is_auto=True)
-            else:
-                location_display_text.value = "📍 Could not detect location. Please type your city or ZIP."
-                page.update()
-        except Exception as ex:
-            location_display_text.value = f"📍 Location detection error: {ex}"
-            page.update()
+
+            # 2. Pass client_ip to resolve the user's city rather than Render's server hub
+            query, lat, lon, display_label = server.auto_detect_location(client_ip)
+
+            # 3. Update input and persist
+            location_input.value = display_label
+            await page.client_storage.set_async("pinned_location", query)
+            await page.client_storage.set_async("location_mode", "auto")
+
+            # 4. Refresh weather data
+            await load_weather(is_auto=True)
+            await page.update_async()
+        except Exception as err:
+            print(f"Location detection error: {err}")
+            await page.update_async()
 
     async def load_weather(is_auto=False):
         loc = location_input.value.strip()
@@ -879,7 +880,7 @@ async def main(page: ft.Page):
     search_row = ft.Row([
         location_input,
         ft.IconButton(icon=ft.Icons.SEARCH, on_click=load_weather_manual, icon_color="amber300", tooltip="Search Location"),
-        ft.IconButton(icon=ft.Icons.MY_LOCATION, on_click=handle_autodetect_click, icon_color="cyan300", tooltip="Auto-Detect My Location"),
+        ft.IconButton(icon=ft.Icons.MY_LOCATION, on_click=auto_detect_gps, icon_color="cyan300", tooltip="Auto-detect location"),
     ], alignment=ft.MainAxisAlignment.CENTER, spacing=2)
 
     photorealistic_2x2_widget = ft.Container(
