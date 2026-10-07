@@ -313,7 +313,7 @@ async def main(page: ft.Page):
         sports_input.value = ", ".join(teams)
         page.update()
         if location_input.value.strip():
-    await load_weather(is_auto=False)
+            await load_weather(is_auto=False)
 
     popular_teams_data = [
         ("🏈 NFL", ["Carolina Panthers", "Dallas Cowboys", "Kansas City Chiefs", "Philadelphia Eagles"]),
