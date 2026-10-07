@@ -716,15 +716,15 @@ async def main(page: ft.Page):
             # 1. Extract visitor's real client IP from incoming proxy headers
             client_ip = extract_client_ip(page)
 
-            # 2. Pass client_ip to resolve the user's city rather than Render's server hub
+            # 2. Query location using visitor IP (resolves tester's actual city and postal ZIP)
             query, lat, lon, display_label = server.auto_detect_location(client_ip)
 
-            # 3. Update input and persist
-            location_input.value = display_label
+            # 3. Provide the 5-digit ZIP code (or lat,lon) so get_full_weather_data resolves instantly
+            location_input.value = query
             await page.client_storage.set_async("pinned_location", query)
             await page.client_storage.set_async("location_mode", "auto")
 
-            # 4. Refresh weather data
+            # 4. Trigger weather fetch
             await load_weather(is_auto=True)
             page.update()
         except Exception as err:
