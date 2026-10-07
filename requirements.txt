@@ -7,4 +7,4 @@ flet
 flet-web
 python-dotenv
 pydantic
-flet-geolocator
+flet-geolocator>=1.0.3
