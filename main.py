@@ -2,13 +2,14 @@ import asyncio
 import inspect
 import flet as ft
 from datetime import datetime
+import server
 
 # Replace these with your live Stripe Payment Links from dashboard.stripe.com/payment-links
 DONATION_LINKS = {
     "1": "https://buy.stripe.com/dRm4gBcyAfh1dw46u3g3601",
     "3": "https://buy.stripe.com/fZubJ34246KveA89Gfg3605",
     "5": "https://buy.stripe.com/dRm5kF8ik2ufbnW5pZg3606",
-    "10": "https://buy.stripe.com/aFa00l0PS7OzfEc05Fg3604",
+    "10": "https://buy.stripe.com/aFa00l0PS7ozfEc05Fg3604",
 }
 
 async def main(page: ft.Page):
@@ -660,7 +661,7 @@ async def main(page: ft.Page):
                 )
         return cards
 
-    async def handle_category_click(e):
+    def handle_category_click(e):
         cat_key = e.control.data
         current_selected_category[0] = cat_key
         for chip in category_buttons_row.controls:
