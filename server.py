@@ -146,30 +146,31 @@ WMO_CODE_MAP = {
 
 PRECIP_CODES = {51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99}
 
-WILMINGTON_FALLBACK = ("28412", 34.1378, -77.9150, "Wilmington, NC (28412)")
-
-def auto_detect_location(client_ip: str = None):
-    CLOUD_HUBS = ["Ashburn", "Boardman", "Council Bluffs", "Boydton"]
+def describe_coordinates(lat: float, lon: float):
+    """A human place name ('Raleigh, NC') for GPS coordinates, or None. National Weather Service first
+    (US), OpenStreetMap as the backup (worldwide)."""
+    headers = {"User-Agent": "ThickMooseWeather/2.0 (contact@thickmooselabs.com)"}
     try:
-        url = f"https://ipapi.co/{client_ip}/json/" if client_ip else "https://ipapi.co/json/"
-        resp = requests.get(url, timeout=3.5, headers={"User-Agent": "ThickMooseWeather/1.0"})
-        if resp.status_code == 200:
-            data = resp.json()
-            city = data.get("city") or "Wilmington"
-            region = data.get("region_code") or "NC"
-            postal = data.get("postal") or "28412"
-            lat = float(data.get("latitude", 34.18))
-            lon = float(data.get("longitude", -77.92))
+        pts = cached_get(f"https://api.weather.gov/points/{round(lat, 4)},{round(lon, 4)}", 21600, timeout=3.5, headers=headers)
+        rel = ((pts.get("properties") or {}).get("relativeLocation") or {}).get("properties") or {}
+        if rel.get("city") and rel.get("state"):
+            return f"{rel['city']}, {rel['state']}"
+    except Exception as exc:
+        logger.info("NWS place-name lookup failed: %s", exc)
+    try:
+        url = f"https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&lat={round(lat, 5)}&lon={round(lon, 5)}"
+        res = cached_get(url, 21600, timeout=3.5, headers=headers)
+        addr = res.get("address") or {}
+        place = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("hamlet") or addr.get("county")
+        cc = (addr.get("country_code") or "").upper()
+        region = (addr.get("ISO3166-2-lvl4") or "").split("-")[-1] if cc == "US" else addr.get("state")
+        if place:
+            parts = [place] + ([region] if region else []) + ([cc] if cc and cc != "US" else [])
+            return ", ".join(parts)
+    except Exception as exc:
+        logger.info("OpenStreetMap place-name lookup failed: %s", exc)
+    return None
 
-            if city in CLOUD_HUBS and not client_ip:
-                return ("28412", 34.18, -77.92, "Wilmington, NC")
-
-            search_query = postal if postal else f"{city}, {region}"
-            display_label = f"{city}, {region}"
-            return (search_query, lat, lon, display_label)
-    except Exception:
-        pass
-    return ("28412", 34.18, -77.92, "Wilmington, NC")
 
 def get_coordinates(query: str):
     clean_q = str(query).strip()
@@ -181,7 +182,9 @@ def get_coordinates(query: str):
         try:
             lat_f = float(parts[0])
             lon_f = float(parts[1])
-            loc_label = f"Location ({round(lat_f, 3)}, {round(lon_f, 3)})"
+            if not (-90.0 <= lat_f <= 90.0 and -180.0 <= lon_f <= 180.0):
+                raise ValueError("coordinates out of range")
+            loc_label = describe_coordinates(lat_f, lon_f) or f"Location ({round(lat_f, 3)}, {round(lon_f, 3)})"
             elev_ft = fetch_elevation_ft(lat_f, lon_f)
             return lat_f, lon_f, elev_ft, loc_label
         except ValueError:

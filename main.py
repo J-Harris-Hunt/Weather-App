@@ -2,6 +2,10 @@ import asyncio
 import inspect
 import logging
 import flet as ft
+try:
+    import flet_geolocator as ftg
+except Exception:          # the app still runs (with typed locations) if the package is missing
+    ftg = None
 from datetime import datetime
 import server
 
@@ -150,21 +154,78 @@ async def main(page: ft.Page):
     latest_weather_data = {}
     current_selected_category = ["weather_climate"]
 
-    def extract_client_ip(pg: ft.Page) -> str:
-        headers = getattr(pg, "headers", None)
-        if headers and isinstance(headers, dict):
-            for target_header in ["x-forwarded-for", "x-real-ip", "cf-connecting-ip"]:
-                for hk, hv in headers.items():
-                    if hk.lower() == target_header and hv:
-                        first_ip = hv.split(",")[0].strip()
-                        if first_ip and not first_ip.startswith(("10.", "172.16.", "192.168.", "127.")):
-                            return first_ip
-        cip = getattr(pg, "client_ip", None)
-        if cip and str(cip) not in ["127.0.0.1", "::1", "localhost", "None", ""]:
-            cip_str = str(cip).strip()
-            if not cip_str.startswith(("10.", "172.16.", "192.168.", "127.")):
-                return cip_str
-        return ""
+    # ---- the phone's own GPS (no guessing from the network address) ----
+    class LocationProblem(Exception):
+        """A problem with a message that is safe and useful to show the person."""
+
+    MAX_ACCURACY_M = 1500          # a fix rougher than ~1 mile is not 'hyper-local'; ask for a retry instead
+    geolocator = None
+    if ftg is not None:
+        try:
+            geolocator = ftg.Geolocator()
+            try:
+                page.services.append(geolocator)
+            except Exception:
+                page.overlay.append(geolocator)
+        except Exception:
+            logging.exception("Geolocator could not be created")
+            geolocator = None
+
+    def _perm_name(status):
+        return str(getattr(status, "name", status)).lower().replace("_", "").replace(".", "")
+
+    async def get_phone_location():
+        """(latitude, longitude) from the phone, or raises LocationProblem with a plain-English reason."""
+        if geolocator is None:
+            raise LocationProblem("Location isn't available in this version of the app. Please type your city or ZIP.")
+        try:
+            if await asyncio.wait_for(geolocator.is_location_service_enabled(), 8) is False:
+                raise LocationProblem("Location is turned off on this phone. Turn it on, then tap 📍 to try again.")
+        except LocationProblem:
+            raise
+        except Exception:
+            logging.debug("Location service check unsupported here", exc_info=True)   # asking for the position will tell us
+
+        try:
+            perm = _perm_name(await asyncio.wait_for(geolocator.get_permission_status(), 8))
+        except Exception:
+            perm = "unknown"
+        if "forever" in perm:
+            raise LocationProblem("Location access is blocked for this app. Allow it in the phone's settings for Thick Moose Weather (or the browser's site settings), then tap 📍.")
+        if "denied" in perm or "unable" in perm or perm in ("", "unknown"):
+            try:
+                perm = _perm_name(await asyncio.wait_for(geolocator.request_permission(), 120))
+            except Exception:
+                logging.debug("Permission request failed", exc_info=True)
+            if "denied" in perm:
+                raise LocationProblem("Location permission was declined. Tap 📍 to try again, or type your city or ZIP.")
+
+        cfg = None
+        try:
+            level = getattr(ftg.GeolocatorPositionAccuracy, "BEST", None) or getattr(ftg.GeolocatorPositionAccuracy, "HIGH", None)
+            if level is not None:
+                cfg = ftg.GeolocatorConfiguration(accuracy=level)
+        except Exception:
+            cfg = None
+        try:
+            call = geolocator.get_current_position(configuration=cfg) if cfg is not None else geolocator.get_current_position()
+            pos = await asyncio.wait_for(call, 30)
+        except asyncio.TimeoutError:
+            raise LocationProblem("Couldn't get a GPS fix in time. Try again near a window or outdoors, or type your city or ZIP.")
+        except Exception:
+            logging.exception("get_current_position failed")
+            raise LocationProblem("Couldn't read this phone's location. Tap 📍 to retry, or type your city or ZIP.")
+
+        lat, lon = getattr(pos, "latitude", None), getattr(pos, "longitude", None)
+        if lat is None or lon is None:
+            raise LocationProblem("The phone didn't return a location. Tap 📍 to retry, or type your city or ZIP.")
+        accuracy = getattr(pos, "accuracy", None)
+        if isinstance(accuracy, (int, float)) and accuracy > MAX_ACCURACY_M:
+            miles = round(accuracy / 1609.34, 1)
+            raise LocationProblem(f"Can't get a precise location (only accurate to about {miles} mi). Tap 📍 to retry, or type your city or ZIP.")
+        return float(lat), float(lon)
+
+    gps_state = {"query": None, "label": "Current location"}
 
     def fmt(value, suffix=""):
         """Show '--' for missing data instead of 'None' or an invented number."""
@@ -923,23 +984,25 @@ async def main(page: ft.Page):
             await load_weather(is_auto=False)
 
     async def auto_detect_gps():
-        import server
-        location_display_text.value = "📍 Detecting location..."
+        location_display_text.value = "📍 Getting your precise location..."
         page.update()
         try:
-            client_ip = extract_client_ip(page)
-            detected_loc, lat, lon, loc_label = await asyncio.to_thread(server.auto_detect_location, client_ip)
-            if detected_loc:
-                location_input.value = detected_loc
-                page.update()
-                await storage_set("tmw_location_mode", "auto")
-                await load_weather(is_auto=True)
-            else:
-                location_display_text.value = "📍 Could not detect location. Please type your city or ZIP."
-                page.update()
-        except Exception as ex:
-            location_display_text.value = f"📍 Location detection error: {ex}"
+            lat, lon = await get_phone_location()
+        except LocationProblem as problem:
+            location_display_text.value = f"📍 {problem}"
             page.update()
+            return
+        except Exception:
+            logging.exception("Location detection failed")
+            location_display_text.value = "📍 Couldn't get your location. Tap 📍 to retry, or type your city or ZIP."
+            page.update()
+            return
+        gps_state["query"] = f"{lat:.5f},{lon:.5f}"
+        gps_state["label"] = "Current location"
+        location_input.value = gps_state["label"]
+        page.update()
+        await storage_set("tmw_location_mode", "auto")
+        await load_weather(is_auto=True)
 
     async def load_weather(is_auto=False):
         loc = location_input.value.strip()
@@ -951,13 +1014,18 @@ async def main(page: ft.Page):
             page.update()
             return
 
+        using_gps = bool(gps_state["query"]) and loc == gps_state["label"]
+        query = gps_state["query"] if using_gps else loc
         if not is_auto:
             await storage_set("tmw_saved_location", loc)
         await storage_set("tmw_saved_teams", teams)
 
         try:
-            res = await asyncio.to_thread(server.get_full_weather_data, loc, teams)
+            res = await asyncio.to_thread(server.get_full_weather_data, query, teams)
             name = res.get("location_name", loc)
+            if using_gps:
+                gps_state["label"] = name
+                location_input.value = name
 
             latest_weather_data.clear()
             latest_weather_data.update(res)
