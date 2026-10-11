@@ -42,6 +42,31 @@ def moon_emoji(phase_text):
     return "🌙"
 
 
+# Background photos for the main card, by weather. Edit these links to change the pictures.
+# If a link ever fails to load, the card simply keeps its colour gradient.
+_PHOTO = "https://images.unsplash.com/photo-{}?auto=format&fit=crop&w=900&q=70"
+CONDITION_PHOTOS = {
+    "sunny": _PHOTO.format("1601297183305-6df142704ea2"),
+    "clear": _PHOTO.format("1506744038136-46273834b3fb"),
+    "cloudy": _PHOTO.format("1534088568595-a066f410bcda"),
+    "rain": _PHOTO.format("1515694346937-94d85e41e6f0"),
+    "thunderstorm": _PHOTO.format("1605727216801-e27ce1d0cc28"),
+}
+
+
+def hero_photo(condition, is_night=False):
+    c = (condition or "").lower()
+    if any(w in c for w in ("thunder", "storm")):
+        return CONDITION_PHOTOS["thunderstorm"]
+    if any(w in c for w in ("rain", "shower", "drizzle")):
+        return CONDITION_PHOTOS["rain"]
+    if any(w in c for w in ("snow", "sleet", "flurr", "freezing", "hail", "fog", "mist", "haze", "smoke")):
+        return None
+    if "cloud" in c or "overcast" in c:
+        return CONDITION_PHOTOS["cloudy"]
+    return None if is_night else CONDITION_PHOTOS["sunny"]
+
+
 def condition_icon(condition, is_night=False):
     """(icon, colour) that actually matches the weather instead of always a sun or moon."""
     c = (condition or "").lower()
@@ -965,6 +990,11 @@ async def main(page: ft.Page):
             widget_moon_text.visible = bool(clear_night)
             widget_hero_icon.visible = not clear_night
             photorealistic_2x2_widget.gradient = hero_gradient(condition, is_night)
+            photo_url = hero_photo(condition, is_night)
+            if photo_url:
+                hero_photo_img.src = photo_url
+            hero_photo_layer.visible = bool(photo_url)
+            hero_scrim.visible = bool(photo_url)
 
             condition_text.value = condition
             curr_temp_text.value = f"{fmt(t_val)}°F"
@@ -1092,8 +1122,30 @@ async def main(page: ft.Page):
         ft.IconButton(icon=ft.Icons.MY_LOCATION, on_click=handle_autodetect_click, icon_color="cyan300", tooltip="Auto-Detect My Location"),
     ], alignment=ft.MainAxisAlignment.CENTER, spacing=2)
 
+    hero_photo_img = ft.Image(src=CONDITION_PHOTOS["sunny"], fit="cover", opacity=0.6, error_content=ft.Container())
+    hero_photo_layer = ft.Container(content=hero_photo_img, left=0, top=0, right=0, bottom=0, visible=False)
+    hero_scrim = ft.Container(bgcolor="rgba(8, 12, 20, 0.45)", left=0, top=0, right=0, bottom=0, visible=False)
+    hero_content = ft.Column([
+                ft.Row([
+                    ft.Column([widget_loc_text, widget_condition_text], spacing=2, expand=True),
+                    ft.Container(content=ft.Text("LIVE", size=10, weight=ft.FontWeight.BOLD, color="amber300"), bgcolor="rgba(255, 193, 7, 0.15)", padding=ft.Padding(8, 4, 8, 4), border_radius=12)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.START),
+                ft.Row([
+                    ft.Column([widget_temp_text, feels_like_text, widget_hl_text], spacing=2),
+                    ft.Container(content=ft.Column([widget_hero_icon, widget_moon_text], spacing=0, horizontal_alignment=ft.CrossAxisAlignment.CENTER), padding=8)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Row([
+                    stat_chip(ico("WATER_DROP"), widget_rain_badge, "rgba(0, 229, 255, 0.12)", "cyan200"),
+                    stat_chip(ico("WB_SUNNY"), widget_uv_badge, "rgba(255, 152, 0, 0.12)", "orange200"),
+                    stat_chip(ico("ECO", "AIR"), widget_aqi_badge, "rgba(76, 175, 80, 0.12)", "green300"),
+                    stat_chip(ico("OPACITY", "WATER_DROP"), humidity_text, "rgba(0, 229, 255, 0.08)", "cyan200"),
+                    stat_chip(ico("AIR"), wind_text, "rgba(0, 229, 255, 0.08)", "cyan200"),
+                ], wrap=True, spacing=8, run_spacing=8),
+            ], spacing=14)
+    hero_stack = ft.Stack([hero_photo_layer, hero_scrim, hero_content])
+
     photorealistic_2x2_widget = ft.Container(
-        expand=True, border_radius=24, padding=20,
+        expand=True, border_radius=24, padding=20, clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
         gradient=ft.LinearGradient(
             begin=ft.Alignment(-0.8, -1.0), end=ft.Alignment(1.0, 1.0),
             colors=["#1f3b5c", "#16202c", "#2b211a"]
@@ -1104,23 +1156,7 @@ async def main(page: ft.Page):
             right=ft.BorderSide(1.0, "rgba(255, 255, 255, 0.10)"),
             bottom=ft.BorderSide(1.0, "rgba(255, 255, 255, 0.08)"),
         ),
-        content=ft.Column([
-            ft.Row([
-                ft.Column([widget_loc_text, widget_condition_text], spacing=2, expand=True),
-                ft.Container(content=ft.Text("LIVE", size=10, weight=ft.FontWeight.BOLD, color="amber300"), bgcolor="rgba(255, 193, 7, 0.15)", padding=ft.Padding(8, 4, 8, 4), border_radius=12)
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.START),
-            ft.Row([
-                ft.Column([widget_temp_text, feels_like_text, widget_hl_text], spacing=2),
-                ft.Container(content=ft.Column([widget_hero_icon, widget_moon_text], spacing=0, horizontal_alignment=ft.CrossAxisAlignment.CENTER), padding=8)
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            ft.Row([
-                stat_chip(ico("WATER_DROP"), widget_rain_badge, "rgba(0, 229, 255, 0.12)", "cyan200"),
-                stat_chip(ico("WB_SUNNY"), widget_uv_badge, "rgba(255, 152, 0, 0.12)", "orange200"),
-                stat_chip(ico("ECO", "AIR"), widget_aqi_badge, "rgba(76, 175, 80, 0.12)", "green300"),
-                stat_chip(ico("OPACITY", "WATER_DROP"), humidity_text, "rgba(0, 229, 255, 0.08)", "cyan200"),
-                stat_chip(ico("AIR"), wind_text, "rgba(0, 229, 255, 0.08)", "cyan200"),
-            ], wrap=True, spacing=8, run_spacing=8),
-        ], spacing=14)
+        content=hero_stack,
     )
 
     praise_mailto = "mailto:thickmooseweather@gmail.com?subject=Thick%20Moose%20Weather%20-%20Suggestions%20%26%20Praise"
