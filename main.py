@@ -1142,10 +1142,10 @@ async def main(page: ft.Page):
                     stat_chip(ico("AIR"), wind_text, "rgba(0, 229, 255, 0.08)", "cyan200"),
                 ], wrap=True, spacing=8, run_spacing=8),
             ], spacing=14)
-    hero_stack = ft.Stack([hero_photo_layer, hero_scrim, hero_content])
+    hero_stack = ft.Stack([hero_photo_layer, hero_scrim, ft.Container(content=hero_content, padding=20)])
 
     photorealistic_2x2_widget = ft.Container(
-        expand=True, border_radius=24, padding=20, clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+        expand=True, border_radius=24, padding=0, clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
         gradient=ft.LinearGradient(
             begin=ft.Alignment(-0.8, -1.0), end=ft.Alignment(1.0, 1.0),
             colors=["#1f3b5c", "#16202c", "#2b211a"]
