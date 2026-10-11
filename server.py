@@ -1267,6 +1267,21 @@ def fetch_comprehensive_weather(lat: float, lon: float):
 
     return curr_obs, calibrated_hourly, daily_forecasts, sun_times, resolved_tz
 
+def fetch_marine(lat: float, lon: float):
+    """Current wave height (ft) and period (s) from the Open-Meteo marine model, or None (inland / unavailable)."""
+    try:
+        url = (f"https://marine-api.open-meteo.com/v1/marine?latitude={round(lat, 3)}&longitude={round(lon, 3)}"
+               "&current=wave_height,wave_period")
+        cur = (cached_get(url, 900, timeout=3.5).get("current")) or {}
+        h = cur.get("wave_height")
+        if h is None:
+            return None
+        return {"wave_ft": round(float(h) * 3.281, 1), "period_s": cur.get("wave_period")}
+    except Exception as exc:
+        logger.info("Marine data unavailable: %s", exc)
+        return None
+
+
 def get_full_weather_data(query: str, sport_team: str = "Carolina Panthers, Atlanta Braves, NC State"):
     lat, lon, elev_ft, location_name = get_coordinates(query)
     if lat is None or lon is None:
@@ -1352,7 +1367,21 @@ def get_full_weather_data(query: str, sport_team: str = "Carolina Panthers, Atla
     hike_base = 100 - abs(avg_temp_6h - 65) * 1.6 - (max(0, curr_hum - 65) * 0.4) - (avg_wind_6h * 0.4) - rain_penalty
     hike_score = max(30, min(99, round(hike_base)))
 
-    surf_score = max(30, min(95, round(60 + (avg_wind_6h * 1.8) - (rain_penalty * 0.3)))) if is_coast else 40
+    storm_soon = ("thunder" in str(curr_cond).lower()) or any("thunder" in str(h.get("condition", "")).lower() for h in hourly_36[:6])
+    marine = fetch_marine(lat, lon) if is_coast else None
+    wave_txt = (f"Waves about {marine['wave_ft']} ft" + (f" every {round(marine['period_s'])} s" if marine.get("period_s") else "")
+                + " (marine forecast model)") if marine else None
+    if marine:
+        wf = marine["wave_ft"]
+        surf_base = 25 if wf < 1 else 40 if wf < 2 else 65 if wf < 4 else 80 if wf < 6 else 90 if wf < 10 else 55
+        surf_score = max(20, min(95, round(surf_base - max(0, avg_wind_6h - 12) * 1.5)))
+        surf_details = f"🏄 Surf: {wave_txt}; winds {avg_wind_6h} mph. {'Small, often too flat to surf.' if wf < 2 else 'Rideable size for most surfers.' if wf < 6 else 'Large surf; experienced surfers only.'}"
+    elif is_coast:
+        surf_score = "--"
+        surf_details = "🏄 Surf: wave data is unavailable right now, so no rating is shown. Check a local surf report."
+    else:
+        surf_score = "--"
+        surf_details = "🏄 Surf: not applicable, this location is inland."
 
     outdoor_activities = {
         "beach_and_sunbathing": {
@@ -1361,7 +1390,7 @@ def get_full_weather_data(query: str, sport_team: str = "Carolina Panthers, Atla
         },
         "swimming_and_water": {
             "score": swim_score,
-            "details": f"🏊 Water Index: Current air {curr_temp}°F → 6-hour trend ~{avg_temp_6h}°F. Winds averaging {avg_wind_6h} mph.\n• {'Comfortable open water recreation.' if avg_temp_6h >= 76 and avg_wind_6h < 12 else 'Cool surface conditions; keep sessions brief.'}\n• {six_hour_summary}."
+            "details": f"🏊 Swim conditions (estimated from air temperature and wind; water temperature isn't measured): air {curr_temp}°F → ~{avg_temp_6h}°F over 6 hours, winds {avg_wind_6h} mph.\n• {'Comfortable weather for swimming.' if avg_temp_6h >= 76 and avg_wind_6h < 12 else 'Cool or breezy; keep sessions brief.'}" + (f"\n• {wave_txt}." if wave_txt else "") + f"\n• {six_hour_summary}."
         },
         "hiking_and_trails": {
             "score": hike_score,
@@ -1369,7 +1398,7 @@ def get_full_weather_data(query: str, sport_team: str = "Carolina Panthers, Atla
         },
         "surfing_and_boardsports": {
             "score": surf_score,
-            "details": f"🏄 Boardsports & Swell: {'Clean coastal breakers' if is_coast else 'Inland chop'} with {avg_wind_6h} mph sustained winds.\n• {six_hour_summary}."
+            "details": surf_details
         },
         "walking": {
             "score": max(35, min(99, round(100 - abs(avg_temp_6h - 70) * 1.5 - (max(0, curr_hum - 65) * 0.4) - (avg_wind_6h * 0.5) - rain_penalty))),
@@ -1385,11 +1414,11 @@ def get_full_weather_data(query: str, sport_team: str = "Carolina Panthers, Atla
         },
         "boating": {
             "score": max(25, min(99, round(95 - (avg_wind_6h * 2.2) - (rain_penalty * 0.5)))),
-            "details": f"⛵ Navigation ({boating_body}): Winds {curr_wind} mph (now) → 6-hour average {avg_wind_6h} mph.\n• {'Calm navigable water with chop under 1 ft.' if avg_wind_6h < 10 else 'Moderate surface chop; secure gear.' if avg_wind_6h < 18 else 'Caution: Steep surface wind chop.'}"
+            "details": f"⛵ Navigation ({boating_body}): Winds {curr_wind} mph (now) → 6-hour average {avg_wind_6h} mph.\n• {'Light winds.' if avg_wind_6h < 10 else 'Moderate winds; expect some chop, secure gear.' if avg_wind_6h < 18 else 'Strong winds; small-craft caution.'}"
         },
         "fishing": {
             "score": max(45, min(96, round(88 - (avg_wind_6h * 0.8)))),
-            "details": f"🎣 Angler Index: Ambient {curr_temp}°F with winds around {avg_wind_6h} mph.\n• {'Stable atmospheric pressure favors active feeding along structure.' if avg_wind_6h < 12 else 'Turbulent surface chop dispersing baitfish along windy edges.'}\n• {six_hour_summary}."
+            "details": f"🎣 Fishing: air {curr_temp}°F with winds around {avg_wind_6h} mph, barometer {curr_pressure} hPa.\n• {'Light winds make for easy fishing.' if avg_wind_6h < 12 else 'Windy; expect choppy water and harder casting.'}\n• {six_hour_summary}."
         },
         "camping": {
             "score": max(35, min(99, round(98 - abs(tonight_low - 55) * 1.2 - (avg_wind_6h * 0.8) - (rain_penalty * 0.6)))),
@@ -1401,14 +1430,20 @@ def get_full_weather_data(query: str, sport_team: str = "Carolina Panthers, Atla
         },
         "hunting": {
             "score": 88 if avg_wind_6h < 10 and max_rain_6h < 25 else 65,
-            "details": f"🏹 Game Movement: Winds averaging {avg_wind_6h} mph across 6-hour forecast window.\n• Steady scent dispersion; peak dawn/dusk feeding favored."
+            "details": f"🏹 Hunting: winds averaging {avg_wind_6h} mph, rain chance up to {max_rain_6h}% over the next 6 hours.\n• {'Light, steady wind is good for scent control.' if avg_wind_6h < 10 else 'Gusty or strong wind makes scent control and shooting harder.'}\n• Check local seasons and regulations."
         }
     }
+
+    if storm_soon:
+        for _name, _entry in outdoor_activities.items():
+            if isinstance(_entry.get("score"), (int, float)):
+                _entry["score"] = min(_entry["score"], 20)
+            _entry["details"] = "⚠️ Thunderstorms in the next 6 hours. Stay off the water and away from open areas.\n" + _entry["details"]
 
     # 1. Car Wash Index
     car_wash_score = max(20, min(99, round(98 - (max_rain_6h * 0.6) - (next_day_rain * 0.35) - (avg_wind_6h * 0.5))))
     car_wash_note = (
-        "Optimal wash & wax window. Clear road conditions with zero rain interference expected for 48 hours."
+        "Good wash window. Low rain risk over the next day or so."
         if car_wash_score >= 80 else
         "Acceptable for a quick rinse. Spotty precipitation possible over the next 24-48 hours."
         if car_wash_score >= 55 else
@@ -1437,9 +1472,11 @@ def get_full_weather_data(query: str, sport_team: str = "Carolina Panthers, Atla
 
     # 4. Mosquito & Biting Insect Index
     mosquito_risk_score = min(98, max(15, round((curr_hum * 0.6) + (max(0, curr_temp - 55) * 0.7) - (curr_wind * 1.8))))
+    if curr_temp < 50:
+        mosquito_risk_score = min(mosquito_risk_score, 20)      # mosquitoes are largely inactive in the cold
     mosquito_details = (
         f"🦟 Insect Activity: Hazard Score {mosquito_risk_score}/100.\n"
-        f"• {'High biting midge and mosquito flight pressure around shaded turf and marsh edges due to high humidity (' + str(curr_hum) + '%).' if mosquito_risk_score >= 70 else 'Moderate insect activity; light repellent recommended for dawn/dusk intervals.' if mosquito_risk_score >= 45 else 'Low insect activity; breezy conditions and cooler temperatures suppress flight.'}\n"
+        f"• {'Cold air; mosquitoes are mostly inactive.' if curr_temp < 50 else 'High mosquito and biting-midge activity likely near shade, standing water and marshes (humidity ' + str(curr_hum) + '%).' if mosquito_risk_score >= 70 else 'Moderate insect activity; light repellent recommended for dawn/dusk intervals.' if mosquito_risk_score >= 45 else 'Low insect activity; breezy conditions and cooler temperatures suppress flight.'}\n"
         f"• Mosquitoes are most active around dawn and dusk."
     )
 
@@ -1454,14 +1491,17 @@ def get_full_weather_data(query: str, sport_team: str = "Carolina Panthers, Atla
     )
 
     # 6. UV Radiation & Sunscreen Burn Time
-    burn_time_min = round(200 / max(1.0, curr_uv)) if curr_uv > 0 else 999
-    burn_str = f"Roughly {burn_time_min} minutes for unprotected fair skin (rough estimate)" if curr_uv >= 3.0 else "Minimal burn danger without direct prolonged exposure"
+    burn_time_min = int(5 * round((100 / max(1.0, curr_uv)) / 5)) or 5 if curr_uv > 0 else 999
+    burn_str = f"Roughly {burn_time_min} minutes for unprotected fair skin at this UV (rough estimate; darker skin takes longer)" if curr_uv >= 3.0 else "Minimal burn danger without direct prolonged exposure"
 
     # 7. Natural Home Ventilation & HVAC Guidance
     hvac_score = 92 if (62 <= curr_temp <= 74 and curr_hum < 65 and max_rain_6h < 20) else (65 if (55 <= curr_temp <= 80) else 40)
+    poor_air = isinstance(live_aqi.get('value'), (int, float)) and live_aqi['value'] > 100
+    if poor_air:
+        hvac_score = min(hvac_score, 25)
     hvac_details = (
         f"🏡 Fresh Air Ventilation Index: Score {hvac_score}/100.\n"
-        f"• {'Prime conditions to open windows and naturally ventilate home; outdoor air is crisp and comfortable with low dust.' if hvac_score >= 80 else 'Keep windows closed and cycle HVAC. Outdoor humidity (' + str(curr_hum) + '%) will introduce moisture into indoor living spaces.' if curr_hum > 75 else 'Moderate conditions. Screen ventilation acceptable during midday hours.'}"
+        f"• {'Outdoor air quality is poor (AQI ' + str(live_aqi.get('value')) + '). Keep windows closed.' if poor_air else 'Comfortable, dry outdoor air; good conditions to open windows.' if hvac_score >= 80 else 'Keep windows closed and cycle HVAC. Outdoor humidity (' + str(curr_hum) + '%) will introduce moisture into indoor living spaces.' if curr_hum > 75 else 'Moderate conditions. Screen ventilation acceptable during midday hours.'}"
     )
 
     foliage_text = foliage_status(lat, elev_ft, is_coast, now.replace(tzinfo=None))
