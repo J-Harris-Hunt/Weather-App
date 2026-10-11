@@ -649,16 +649,16 @@ def generate_microclimate_profile(lat: float, lon: float, elev_ft, location_name
     elev_txt = f"{elev_ft:,} ft" if elev_known else "unknown"
 
     if elev_known and elev_ft >= 3000:
-        micro_memo = f"High-Altitude Sector (Elev. {elev_txt}): Rapid nighttime radiation cooling with valley inversions possible."
+        micro_memo = f"High-Altitude Sector (Elev. {elev_txt}): Nights can cool quickly, and valley temperature inversions are possible (general terrain guidance)."
         boating_body = f"Mountain Lakes & High-Elevation Reservoirs ({location_name})"
     elif elev_known and elev_ft >= 1000:
-        micro_memo = f"Upland / Piedmont Terrain (Elev. {elev_txt}): Wider day-to-night temperature swings than the coast."
+        micro_memo = f"Upland / Piedmont Terrain (Elev. {elev_txt}): Inland uplands usually see wider day-to-night temperature swings than the coast (general terrain guidance)."
         boating_body = f"Regional Freshwater Reservoirs & River Basins ({location_name})"
     elif is_coast:
-        micro_memo = f"Coastal Zone (Elev. {elev_txt}): Nearby water moderates daytime highs and nighttime lows; sea breezes are common."
+        micro_memo = f"Coastal Zone (Elev. {elev_txt}): Nearby water usually moderates highs and lows, and sea breezes are common (general terrain guidance)."
         boating_body = f"Coastal Waters, Sounds & Tidal Rivers ({location_name})"
     else:
-        micro_memo = f"Inland Lowland (Elev. {elev_txt}): Cool air can pool in low spots overnight."
+        micro_memo = f"Inland Lowland (Elev. {elev_txt}): Cool air can pool in low spots overnight (general terrain guidance)."
         boating_body = f"Regional Rivers & Inland Lakes ({location_name})"
 
     if tide_text:
@@ -1349,6 +1349,8 @@ def get_full_weather_data(query: str, sport_team: str = "Carolina Panthers, Atla
     night_temps = [h["temp"] for h in hourly_36[:24] if h.get("is_night") and h.get("temp") is not None]
     tonight_low = min(night_temps) if night_temps else daily_list[0]["low"]
     today_high = daily_list[0]["high"]
+    morning_temps = [h["temp"] for h in hourly_36 if h.get("time") in ("6 AM", "7 AM", "8 AM", "9 AM") and h.get("temp") is not None][:4]
+    morning_temp = round(sum(morning_temps) / len(morning_temps)) if morning_temps else tonight_low
     afternoon_high = today_high
     if (now.hour >= 15 or is_night_now) and len(daily_list) > 1:
         afternoon_high = daily_list[1]["high"]
@@ -1515,7 +1517,7 @@ def get_full_weather_data(query: str, sport_team: str = "Carolina Panthers, Atla
 
     lifestyle = {
         "clothing": {
-            "morning": f"🌅 Morning ({tonight_low}°F): {clothing_advice(tonight_low)}",
+            "morning": f"🌅 Morning ({morning_temp}°F): {clothing_advice(morning_temp)}",
             "afternoon": f"☀️ Afternoon ({afternoon_high}°F): {clothing_advice(afternoon_high)}",
             "night": f"🌙 Night ({tonight_low}°F): {clothing_advice(tonight_low)}",
         },
