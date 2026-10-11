@@ -1,4 +1,5 @@
 import asyncio
+import re
 import inspect
 import logging
 import flet as ft
@@ -1298,6 +1299,19 @@ async def main(page: ft.Page):
     if saved_teams is not None:          # "" is a real choice: no teams tracked
         sports_input.value = saved_teams
         page.update()
+
+    # Store builds (Google Play / App Store) open the site with ?app=android or ?app=ios. Their payment
+    # rules don't allow outside tip links, so hide the tip badge there. The website keeps it.
+    # Remember the marker too, in case a later launch comes in without the query string.
+    try:
+        seen = " ".join(str(getattr(page, n, "") or "") for n in ("url", "route", "query"))
+        if re.search(r"app=(android|ios|store)", seen, re.I):
+            await storage_set("tmw_store_app", "1")
+        if (await storage_get("tmw_store_app")) == "1":
+            keep_weather_free_badge.visible = False
+            page.update()
+    except Exception:
+        logging.debug("Store-mode check failed", exc_info=True)
 
     loc_mode = await storage_get("tmw_location_mode")
     saved_loc = await storage_get("tmw_saved_location")
