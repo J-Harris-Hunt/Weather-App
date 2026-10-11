@@ -381,7 +381,11 @@ def fetch_noaa_tides(station):
             t_type = "High Tide" if p.get("type") == "H" else "Low Tide"
             dt_obj = datetime.strptime(p.get("t"), "%Y-%m-%d %H:%M")
             t_str = dt_obj.strftime("%I:%M %p").lstrip("0")
-            lines.append(f"• {t_str}: {t_type} ({p.get('v', '?')} ft MLLW)")
+            try:
+                height = f"{float(p.get('v')):.1f}"
+            except (TypeError, ValueError):
+                height = "?"
+            lines.append(f"• {t_str}: {t_type} ({height} ft)")
         return "\n".join(lines)
     except Exception as exc:
         logger.warning("Tide prediction lookup failed: %s", exc)
@@ -431,7 +435,10 @@ def fetch_noaa_alerts(lat: float, lon: float):
             event = props.get("event", "Weather Alert")
             headline = props.get("headline") or props.get("description", "")
             short_line = headline.splitlines()[0] if headline else event
-            alert_entry = f"⚠️ {event}: {short_line}"
+            if short_line.lower().startswith(event.lower()):
+                alert_entry = f"⚠️ {short_line}"      # headline already names the event
+            else:
+                alert_entry = f"⚠️ {event}: {short_line}"
             if any(term in event.lower() for term in ["tropical", "hurricane", "surge", "gale", "cyclone"]):
                 tropical_alerts.append(alert_entry)
             else:
