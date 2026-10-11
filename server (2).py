@@ -690,36 +690,38 @@ def calculate_6hr_forecast_metrics(curr_temp, curr_wind, hourly_36):
     trend_note = f"6-Hour Outlook: Expected ~{avg_temp}°F, winds ~{avg_wind} mph, max rain risk {max_rain}%"
     return avg_temp, avg_wind, max_rain, trend_note
 
+def _tokens(text: str):
+    return [w for w in re.findall(r"[a-z0-9&']+", (text or "").lower()) if w not in ("the", "fc", "of")]
+
+
 def calculate_team_match_score(query: str, d_name: str, s_name: str, short_d: str, abbrev: str):
+    """How well a typed team name matches an ESPN team. Every word you type must appear in the
+    team's full name, so 'Carolina Panthers' can no longer match the Florida or Pittsburgh Panthers."""
     q = query.lower().strip()
     d_name = d_name.lower().strip()
     s_name = s_name.lower().strip()
     short_d = short_d.lower().strip()
     abbrev = abbrev.lower().strip()
+    if not q:
+        return 0
 
-    if q in [d_name, short_d, abbrev]:
+    if q in (d_name, abbrev):
         return 100
-    if q == s_name and q not in GENERIC_STOPWORDS:
-        return 92
-
     if any(alias in q for alias in ["nc state", "ncsu", "wolfpack"]):
         if "north carolina state" in d_name or "nc state" in short_d or s_name == "wolfpack":
             return 98
 
+    q_tok = _tokens(q)
+    d_tok = set(_tokens(d_name))
+    if not q_tok or not all(w in d_tok for w in q_tok):
+        return 0
+    location = d_name[: -len(s_name)].strip() if s_name and d_name.endswith(s_name) else d_name
+    if q == location:
+        return 92                      # "Atlanta" -> Atlanta Braves is better than "Atlanta United"
     if q in d_name:
-        return 88
-    if short_d in q or (s_name in q and s_name not in GENERIC_STOPWORDS):
-        return 82
+        return 90                      # contiguous part of the real name ("carolina panthers", "tar heels")
+    return 84                          # all words present, different order or gaps
 
-    q_words = [w for w in q.split() if w not in GENERIC_STOPWORDS and len(w) > 2]
-    if q_words:
-        matches = [w for w in q_words if w in d_name or w in s_name]
-        if len(matches) == len(q_words):
-            return 80
-        if len(matches) > 0 and len(q_words) == 1 and matches[0] in [s_name, short_d]:
-            return 75
-
-    return 0
 
 _VENUE_GEO_CACHE = {}
 
@@ -751,10 +753,33 @@ def resolve_venue_location(home_team_name: str, venue_city: str, venue_state: st
     return None, None, None
 
 
-def fetch_stadium_live_weather(lat, lon, is_indoor: bool = False):
+def fetch_stadium_live_weather(lat, lon, is_indoor: bool = False, kickoff_utc=None):
+    """Weather at the venue: the forecast for kickoff when the game is still ahead, otherwise right now."""
     if lat is None or lon is None:
         return "Stadium weather unavailable (venue location could not be determined)."
     try:
+        now_utc = datetime.now(timezone.utc)
+        ahead = kickoff_utc is not None and kickoff_utc > now_utc + timedelta(hours=1.5)
+        if ahead and kickoff_utc <= now_utc + timedelta(days=15):
+            url = (f"https://api.open-meteo.com/v1/forecast?latitude={round(lat, 4)}&longitude={round(lon, 4)}"
+                   "&hourly=temperature_2m,weather_code,wind_speed_10m,precipitation_probability"
+                   "&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=UTC&forecast_days=16")
+            res = cached_get(url, 900, timeout=3.5)
+            h = res.get("hourly") or {}
+            times = h.get("time") or []
+            target = kickoff_utc.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1 if kickoff_utc.minute >= 30 else 0)
+            key = target.strftime("%Y-%m-%dT%H:%M")
+            if key in times:
+                i = times.index(key)
+                t = h["temperature_2m"][i]
+                if t is not None:
+                    w = round(_num(h["wind_speed_10m"][i], 0.0), 1)
+                    cond = WMO_CODE_MAP.get(h["weather_code"][i], "Conditions unavailable")
+                    p = h["precipitation_probability"][i] if i < len(h.get("precipitation_probability") or []) else None
+                    rain = f", {p}% rain" if p is not None else ""
+                    prefix = "Forecast at kickoff (outdoors): " if is_indoor else "Forecast at kickoff: "
+                    suffix = " • Indoor / climate-controlled venue" if is_indoor else ""
+                    return f"{prefix}{round(t)}°F, {cond}, Wind {w} mph{rain}{suffix}"
         url = (f"https://api.open-meteo.com/v1/forecast?latitude={round(lat, 4)}&longitude={round(lon, 4)}"
                "&current=temperature_2m,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph")
         res = cached_get(url, 300, timeout=3.5)
@@ -773,39 +798,63 @@ def fetch_stadium_live_weather(lat, lon, is_indoor: bool = False):
 
 
 _SPORT_LEAGUES = [
-    ("football", "nfl", "NFL", "limit=100"),
-    ("baseball", "mlb", "MLB", "limit=100"),
-    ("football", "college-football", "NCAA", "groups=80&limit=100"),
-    ("hockey", "nhl", "NHL", "limit=100"),
-    ("basketball", "nba", "NBA", "limit=100"),
+    ("football", "nfl", "NFL", "limit=300"),
+    ("baseball", "mlb", "MLB", "limit=300"),
+    ("football", "college-football", "NCAA", "groups=80&limit=300"),
+    ("hockey", "nhl", "NHL", "limit=300"),
+    ("basketball", "nba", "NBA", "limit=300"),
 ]
+
+SPORTS_LOOKAHEAD_DAYS = 14
 
 
 def _fetch_scoreboard(spec):
+    """One league's games from yesterday through the next two weeks (not just today)."""
     sport, league_path, _tag, q_params = spec
-    url = f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{league_path}/scoreboard?{q_params}"
     try:
-        return cached_get(url, 60, timeout=3.5, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        today = datetime.now(ZoneInfo("America/New_York")).date()
+    except Exception:
+        today = datetime.now(timezone.utc).date()
+    span = f"{(today - timedelta(days=1)):%Y%m%d}-{(today + timedelta(days=SPORTS_LOOKAHEAD_DAYS)):%Y%m%d}"
+    url = f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{league_path}/scoreboard?{q_params}&dates={span}"
+    try:
+        return cached_get(url, 120, timeout=4.5, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
     except Exception as exc:
         logger.warning("ESPN scoreboard failed (%s): %s", league_path, exc)
         return None
 
 
+def _pick_game(cands, now_utc):
+    """Live game first, then a game that just finished, then the next one coming up."""
+    live = [c for c in cands if c["state"] == "in"]
+    if live:
+        return live[0]
+    recent = [c for c in cands if c["state"] == "post" and c["when"] and timedelta(0) <= now_utc - c["when"] <= timedelta(hours=8)]
+    if recent:
+        return max(recent, key=lambda c: c["when"])
+    upcoming = sorted([c for c in cands if c["state"] == "pre" and c["when"]], key=lambda c: c["when"])
+    return upcoming[0] if upcoming else None
+
+
 def fetch_live_sports_events(sport_query: str):
     events = []
-    default_teams = ["panthers", "braves", "nc state"]
-    active_search = [s.strip().lower() for s in (sport_query or "").split(",") if s.strip()] or default_teams
+    # An empty list means "track nothing" - the old code silently re-added default teams.
+    active_search = [t.strip().lower() for t in (sport_query or "").split(",") if t.strip()]
+    if not active_search:
+        return []
 
-    # Fetch each league's scoreboard once (in parallel, cached 60 s) and reuse it for every team.
+    # Fetch each league's schedule window once (in parallel, cached) and reuse it for every team.
     boards = list(_SPORTS_POOL.map(_fetch_scoreboard, _SPORT_LEAGUES))
     if all(b is None for b in boards):
         return [{
             "title": "Live sports data is temporarily unavailable",
             "venue": "", "time": "Please try again in a minute.", "score": "", "conditions": "", "alternatives": [],
         }]
+    now_utc = datetime.now(timezone.utc)
 
     for raw_s_key in active_search:
-        clean_key = re.sub(r'\b(football|baseball|basketball|hockey|soccer|mens|womens|men\'s|women\'s|matchup|game)\b', '', raw_s_key, flags=re.IGNORECASE).strip()
+        clean_key = re.sub(r"\b(football|baseball|basketball|hockey|soccer|mens|womens|men\'s|women\'s|matchup|game)\b", "", raw_s_key, flags=re.IGNORECASE).strip()
+        clean_key = re.sub(r"\s+", " ", clean_key)
         candidates = []
 
         for spec, board in zip(_SPORT_LEAGUES, boards):
@@ -819,107 +868,116 @@ def fetch_live_sports_events(sport_query: str):
                 for c in competitors:
                     t_info = c.get("team", {})
                     d_name = t_info.get("displayName", "")
-                    s_name = t_info.get("name", "")
-                    short_d = t_info.get("shortDisplayName", "")
-                    abbrev = t_info.get("abbreviation", "")
+                    score = calculate_team_match_score(clean_key or raw_s_key, d_name, t_info.get("name", ""),
+                                                       t_info.get("shortDisplayName", ""), t_info.get("abbreviation", ""))
+                    if score < 70:
+                        continue
+                    venue = comp.get("venue", {})
+                    v_name = venue.get("fullName", "Stadium")
+                    city = venue.get("address", {}).get("city", "")
+                    state = venue.get("address", {}).get("state", "")
+                    venue_str = f"{v_name} ({city}, {state})" if city else v_name
 
-                    score = calculate_team_match_score(clean_key or raw_s_key, d_name, s_name, short_d, abbrev)
-                    if score >= 70:
-                        venue = comp.get("venue", {})
-                        v_name = venue.get("fullName", "Stadium")
-                        city = venue.get("address", {}).get("city", "")
-                        state = venue.get("address", {}).get("state", "")
-                        venue_str = f"{v_name} ({city}, {state})" if city else v_name
-                        espn_indoor = bool(venue.get("indoor", False))
+                    home_comp = next((x for x in competitors if x.get("homeAway") == "home"), None)
+                    home_name = (home_comp or {}).get("team", {}).get("displayName", "")
 
-                        home_comp = next((x for x in competitors if x.get("homeAway") == "home"), None)
-                        home_name = (home_comp or {}).get("team", {}).get("displayName", "")
-                        v_lat, v_lon, map_indoor = resolve_venue_location(home_name, city, state)
-                        is_indoor = espn_indoor or bool(map_indoor)
+                    status_type = ev.get("status", {}).get("type", {})
+                    status_str = status_type.get("detail", "")
+                    state_val = status_type.get("state", "")
 
-                        date_str = ev.get("date", "")
-                        status_type = ev.get("status", {}).get("type", {})
-                        status_str = status_type.get("detail", "")
-                        state_val = status_type.get("state", "")
+                    live_game_score = ""
+                    if len(competitors) >= 2:
+                        away_comp = next((x for x in competitors if x.get("homeAway") == "away"), competitors[0])
+                        home_c = next((x for x in competitors if x.get("homeAway") == "home"), competitors[1])
+                        away_abbr = away_comp.get("team", {}).get("abbreviation") or away_comp.get("team", {}).get("shortDisplayName") or "AWAY"
+                        home_abbr = home_c.get("team", {}).get("abbreviation") or home_c.get("team", {}).get("shortDisplayName") or "HOME"
+                        a_score, h_score = away_comp.get("score"), home_c.get("score")
+                        if a_score not in (None, "") and h_score not in (None, "") and state_val in ("in", "post"):
+                            live_game_score = f"{away_abbr} {a_score} - {h_score} {home_abbr}"
 
-                        live_game_score = ""
-                        if competitors and len(competitors) >= 2:
-                            away_comp = next((x for x in competitors if x.get("homeAway") == "away"), competitors[0])
-                            home_c = next((x for x in competitors if x.get("homeAway") == "home"), competitors[1])
-                            away_abbr = away_comp.get("team", {}).get("abbreviation") or away_comp.get("team", {}).get("shortDisplayName") or "AWAY"
-                            home_abbr = home_c.get("team", {}).get("abbreviation") or home_c.get("team", {}).get("shortDisplayName") or "HOME"
-                            a_score = away_comp.get("score")
-                            h_score = home_c.get("score")
-                            if a_score is not None and h_score is not None and str(a_score) != "" and str(h_score) != "" and state_val in ["in", "post"]:
-                                live_game_score = f"{away_abbr} {a_score} - {h_score} {home_abbr}"
+                    when = None
+                    time_formatted = status_str or "Game time TBD"
+                    try:
+                        when = datetime.fromisoformat(ev.get("date", "").replace("Z", "+00:00")).astimezone(timezone.utc)
+                        local = when.astimezone(ZoneInfo("America/New_York"))
+                        time_formatted = f"{local:%a %b} {local.day}, {local.strftime('%I:%M %p %Z').lstrip('0')}"
+                    except Exception:
+                        pass
+                    if state_val == "in":
+                        time_text = f"LIVE • {status_str}" if status_str else "LIVE"
+                    elif state_val == "post":
+                        time_text = f"{time_formatted} • Final"
+                    else:
+                        time_text = time_formatted
 
-                        try:
-                            dt_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00")).astimezone(ZoneInfo("America/New_York"))
-                            time_formatted = dt_obj.strftime("%A %I:%M %p %Z")  # shows EDT or EST correctly
-                        except Exception:
-                            time_formatted = status_str or "Game time TBD"
+                    candidates.append({
+                        "score_rank": score, "team": d_name,
+                        "matched_team": f"{d_name} ({league_tag})",
+                        "title": ev.get("name", raw_s_key.title()),
+                        "venue": venue_str, "time": time_text, "game_score": live_game_score,
+                        "state": state_val, "when": when,
+                        "home_name": home_name, "city": city, "st": state,
+                    })
+                    break
 
-                        candidates.append({
-                            "score_rank": score,
-                            "matched_team": f"{d_name} ({league_tag})",
-                            "title": ev.get("name", raw_s_key.title()),
-                            "venue": venue_str,
-                            "time": f"{time_formatted} • {status_str}" if status_str and status_str != time_formatted else time_formatted,
-                            "game_score": live_game_score,
-                            "lat": v_lat, "lon": v_lon, "indoor": is_indoor,
-                            "league_tag": league_tag
-                        })
-                        break
-
+        pick = None
         if candidates:
-            candidates.sort(key=lambda x: x["score_rank"], reverse=True)
-            top = candidates[0]
-            cond_str = fetch_stadium_live_weather(top["lat"], top["lon"], top["indoor"])
+            # Best-matching team(s) first; if several teams tie, the one with the soonest relevant game wins.
+            far = datetime.max.replace(tzinfo=timezone.utc)
+            candidates.sort(key=lambda x: (-x["score_rank"], x["when"] or far))
+            best = candidates[0]["score_rank"]
+            picks = []
+            for team_name in dict.fromkeys(c["matched_team"] for c in candidates if c["score_rank"] == best):
+                p = _pick_game([c for c in candidates if c["matched_team"] == team_name], now_utc)
+                if p:
+                    picks.append(p)
+            if picks:
+                picks.sort(key=lambda p: (p["state"] != "in", p["when"] or far))
+                pick = picks[0]
 
+        if pick:
+            v_lat, v_lon, map_indoor = resolve_venue_location(pick["home_name"], pick["city"], pick["st"])
+            cond_str = fetch_stadium_live_weather(v_lat, v_lon, bool(map_indoor),
+                                                  kickoff_utc=pick["when"] if pick["state"] == "pre" else None)
             alternatives = []
-            seen_alts = {top["matched_team"]}
-            for cand in candidates[1:]:
-                alt_name = cand["matched_team"]
-                if alt_name not in seen_alts and len(alternatives) < 3:
-                    seen_alts.add(alt_name)
-                    clean_alt_query = cand["matched_team"].split("(")[0].strip()
-                    alternatives.append({"name": alt_name, "query": clean_alt_query})
-
+            if pick["score_rank"] < 98 and len(_tokens(clean_key or raw_s_key)) <= 1:   # one-word names can be ambiguous
+                seen_alts = {pick["matched_team"]}
+                for cand in candidates:
+                    alt_name = cand["matched_team"]
+                    if alt_name not in seen_alts and len(alternatives) < 3:
+                        seen_alts.add(alt_name)
+                        alternatives.append({"name": alt_name, "query": cand["team"]})
             events.append({
-                "title": top["title"],
-                "venue": top["venue"],
-                "time": top["time"],
-                "score": top.get("game_score", ""),
-                "conditions": cond_str,
-                "alternatives": alternatives
+                "title": pick["title"], "venue": pick["venue"], "time": pick["time"],
+                "score": pick.get("game_score", ""), "conditions": cond_str, "alternatives": alternatives,
+            })
+            continue
+
+        # No game in the window: say so, with the home venue's weather when we know the team.
+        matched_val = None
+        if clean_key:
+            for k in sorted(TEAM_STADIUM_MAP, key=len, reverse=True):
+                if re.search(rf"\b{re.escape(k)}\b", clean_key) or re.search(rf"\b{re.escape(clean_key)}\b", k):
+                    matched_val = TEAM_STADIUM_MAP[k]
+                    break
+        if candidates:
+            name = candidates[0]["matched_team"]
+            events.append({"title": name, "venue": "", "alternatives": [], "score": "", "conditions": "",
+                           "time": f"No game scheduled in the next {SPORTS_LOOKAHEAD_DAYS} days (off-season or bye week)."})
+        elif matched_val:
+            events.append({
+                "title": matched_val["name"], "venue": matched_val["venue"], "score": "", "alternatives": [],
+                "time": f"No game scheduled in the next {SPORTS_LOOKAHEAD_DAYS} days (off-season or bye week).",
+                "conditions": "Home venue right now: " + fetch_stadium_live_weather(matched_val["lat"], matched_val["lon"], matched_val.get("indoor", False)),
             })
         else:
-            matched_val = None
-            if clean_key:
-                for k in sorted(TEAM_STADIUM_MAP, key=len, reverse=True):
-                    if re.search(rf"\b{re.escape(k)}\b", clean_key) or re.search(rf"\b{re.escape(clean_key)}\b", k):
-                        matched_val = TEAM_STADIUM_MAP[k]
-                        break
-            if matched_val:
-                events.append({
-                    "title": matched_val["name"],
-                    "venue": matched_val["venue"],
-                    "time": "No game found on today's scoreboard",
-                    "score": "",
-                    "conditions": "Home venue right now: " + fetch_stadium_live_weather(matched_val["lat"], matched_val["lon"], matched_val.get("indoor", False)),
-                    "alternatives": []
-                })
-            elif raw_s_key:
-                events.append({
-                    "title": f"{raw_s_key.title()}",
-                    "venue": "",
-                    "time": "No matching team or game found. Try the full team name (for example, 'Atlanta Braves').",
-                    "score": "",
-                    "conditions": "",
-                    "alternatives": []
-                })
+            events.append({
+                "title": raw_s_key.title(), "venue": "", "score": "", "conditions": "", "alternatives": [],
+                "time": f"No game for this team in the next {SPORTS_LOOKAHEAD_DAYS} days, or the name wasn't recognized. Try the full team name (for example, 'Atlanta Braves').",
+            })
 
     return events
+
 
 def _describe_window(codes):
     """One plain-English description for a stretch of hourly weather codes."""
@@ -1166,7 +1224,7 @@ def fetch_comprehensive_weather(lat: float, lon: float):
 
     return curr_obs, calibrated_hourly, daily_forecasts, sun_times, resolved_tz
 
-def get_full_weather_data(query: str, sport_team: str = "Panthers, Braves, NC State"):
+def get_full_weather_data(query: str, sport_team: str = "Carolina Panthers, Atlanta Braves, NC State"):
     lat, lon, elev_ft, location_name = get_coordinates(query)
     if lat is None or lon is None:
         raise HTTPException(status_code=404, detail="Location not recognized. Please check your city, state, or ZIP code.")
@@ -1814,7 +1872,7 @@ def get_radar_page(
 </html>"""
 
 @app.get("/weather")
-def api_weather(query: str = "", sport_team: str = "Panthers, Braves, NC State"):
+def api_weather(query: str = "", sport_team: str = "Carolina Panthers, Atlanta Braves, NC State"):
     if not query.strip():
         raise HTTPException(status_code=400, detail="Query parameter is required")
     try:

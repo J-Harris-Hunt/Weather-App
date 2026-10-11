@@ -29,6 +29,19 @@ def ico(*names):
     return ft.Icons.PETS
 
 
+_MOONS = {"new moon": "🌑", "waxing crescent": "🌒", "first quarter": "🌓", "waxing gibbous": "🌔",
+          "full moon": "🌕", "waning gibbous": "🌖", "last quarter": "🌗", "waning crescent": "🌘"}
+
+
+def moon_emoji(phase_text):
+    """The Moon picture for tonight's phase name (the server sends e.g. 'Waxing Gibbous (74% illuminated)')."""
+    p = (phase_text or "").lower()
+    for name, face in _MOONS.items():
+        if name in p:
+            return face
+    return "🌙"
+
+
 def condition_icon(condition, is_night=False):
     """(icon, colour) that actually matches the weather instead of always a sun or moon."""
     c = (condition or "").lower()
@@ -320,6 +333,7 @@ async def main(page: ft.Page):
     widget_loc_text = ft.Text("No location selected", size=17, weight=ft.FontWeight.BOLD, color="white")
     widget_condition_text = ft.Text("Search a place or tap the location icon", size=14, color="grey300", weight=ft.FontWeight.W_500)
     widget_hero_icon = ft.Icon(ft.Icons.WB_SUNNY, size=72, color="amber300")
+    widget_moon_text = ft.Text("🌙", size=72, visible=False)
     widget_temp_text = ft.Text("--°", size=72, weight=ft.FontWeight.BOLD, color="white")
     widget_hl_text = ft.Text("H: --°  L: --°", size=13, weight=ft.FontWeight.W_600, color="grey300")
     widget_rain_badge = ft.Text("--% precip", size=12, color="cyan200", weight=ft.FontWeight.W_600)
@@ -338,8 +352,8 @@ async def main(page: ft.Page):
     )
 
     sports_input = ft.TextField(
-        label="Enter Teams (e.g. Panthers, Braves, NC State)",
-        value="Panthers, Braves, NC State",
+        label="Add a team (e.g. Carolina Panthers)",
+        value="Carolina Panthers, Atlanta Braves, NC State",
         expand=True,
         border_color="amber300",
         focused_border_color="amber200",
@@ -418,6 +432,33 @@ async def main(page: ft.Page):
     def close_dialog(e):
         detail_dialog.open = False
         page.update()
+
+    def tracked_teams():
+        return [t.strip() for t in sports_input.value.split(",") if t.strip()]
+
+    async def remove_team(team_name):
+        teams = [t for t in tracked_teams() if t.lower() != team_name.lower()]
+        sports_input.value = ", ".join(teams)
+        await storage_set("tmw_saved_teams", sports_input.value)
+        if location_input.value.strip():
+            await refresh_sports()
+        else:
+            category_cards_column.controls = build_cards_for_category(current_selected_category[0])
+            page.update()
+
+    def team_chips():
+        teams = tracked_teams()
+        if not teams:
+            return ft.Text("No teams tracked. Type a team name above and tap search.", size=12, color="grey400")
+        row = ft.Row(wrap=True, spacing=8, run_spacing=8)
+        for t in teams:
+            row.controls.append(ft.Container(
+                content=ft.Row([ft.Text(t, size=12, color="white"), ft.Icon(ft.Icons.CLOSE, size=14, color="grey400")], spacing=6, tight=True),
+                bgcolor=CARD_INNER, border=ft.Border.all(1, BORDER), border_radius=16,
+                padding=ft.Padding(10, 6, 8, 6), ink=True, tooltip=f"Stop tracking {t}",
+                on_click=lambda e, name=t: page.run_task(remove_team, name),
+            ))
+        return row
 
     async def add_team_from_picker(team_name):
         current_val = sports_input.value.strip()
@@ -538,6 +579,7 @@ async def main(page: ft.Page):
                 bgcolor=CARD_INNER, padding=8, border_radius=8
             )
             cards.append(search_box)
+            cards.append(team_chips())
 
         if not cat_data or not isinstance(cat_data, dict):
             if latest_weather_data:
@@ -876,7 +918,7 @@ async def main(page: ft.Page):
 
     async def load_weather(is_auto=False):
         loc = location_input.value.strip()
-        teams = sports_input.value.strip() or "Panthers, Braves, NC State"
+        teams = sports_input.value.strip()
 
         if not loc:
             condition_text.value = "Enter location or tap 📍"
@@ -910,10 +952,18 @@ async def main(page: ft.Page):
 
             is_night = curr.get("is_night", False)
             hero_icon_name, hero_icon_color = condition_icon(condition, is_night)
-            hero_weather_icon.name = hero_icon_name
+            hero_weather_icon.icon = hero_icon_name
             hero_weather_icon.color = hero_icon_color
-            widget_hero_icon.name = hero_icon_name
+            widget_hero_icon.icon = hero_icon_name
             widget_hero_icon.color = hero_icon_color
+            # Clear night sky: show the Moon as it really looks tonight instead of an icon.
+            sky = (condition or "").lower()
+            clear_night = is_night and not any(w in sky for w in (
+                "rain", "shower", "drizzle", "thunder", "storm", "snow", "sleet", "fog", "mist", "haze", "smoke", "cloud", "overcast"))
+            phase_name = str((res.get("astronomy") or {}).get("moon_phase") or "")
+            widget_moon_text.value = moon_emoji(phase_name)
+            widget_moon_text.visible = bool(clear_night)
+            widget_hero_icon.visible = not clear_night
             photorealistic_2x2_widget.gradient = hero_gradient(condition, is_night)
 
             condition_text.value = condition
@@ -1061,7 +1111,7 @@ async def main(page: ft.Page):
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.START),
             ft.Row([
                 ft.Column([widget_temp_text, feels_like_text, widget_hl_text], spacing=2),
-                ft.Container(content=widget_hero_icon, padding=8)
+                ft.Container(content=ft.Column([widget_hero_icon, widget_moon_text], spacing=0, horizontal_alignment=ft.CrossAxisAlignment.CENTER), padding=8)
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             ft.Row([
                 stat_chip(ico("WATER_DROP"), widget_rain_badge, "rgba(0, 229, 255, 0.12)", "cyan200"),
@@ -1141,7 +1191,7 @@ async def main(page: ft.Page):
     await asyncio.sleep(0.05)
 
     saved_teams = await storage_get("tmw_saved_teams")
-    if saved_teams:
+    if saved_teams is not None:          # "" is a real choice: no teams tracked
         sports_input.value = saved_teams
         page.update()
 
