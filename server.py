@@ -798,30 +798,45 @@ def fetch_stadium_live_weather(lat, lon, is_indoor: bool = False, kickoff_utc=No
 
 
 _SPORT_LEAGUES = [
-    ("football", "nfl", "NFL", "limit=300"),
-    ("baseball", "mlb", "MLB", "limit=300"),
-    ("football", "college-football", "NCAA", "groups=80&limit=300"),
-    ("hockey", "nhl", "NHL", "limit=300"),
-    ("basketball", "nba", "NBA", "limit=300"),
+    ("football", "nfl", "NFL", "limit=200"),
+    ("baseball", "mlb", "MLB", "limit=200"),
+    ("football", "college-football", "NCAA", "groups=80&limit=200"),
+    ("hockey", "nhl", "NHL", "limit=200"),
+    ("basketball", "nba", "NBA", "limit=200"),
 ]
 
 SPORTS_LOOKAHEAD_DAYS = 14
 
 
+_SPORTS_ERRORS = {}
+_ESPN_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+
+
 def _fetch_scoreboard(spec):
-    """One league's games from yesterday through the next two weeks (not just today)."""
+    """One league's games for the next two weeks. If ESPN refuses the date-range request, fall back to
+    the plain 'today' scoreboard so the card still works (just without look-ahead)."""
     sport, league_path, _tag, q_params = spec
+    base = f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{league_path}/scoreboard"
     try:
         today = datetime.now(ZoneInfo("America/New_York")).date()
     except Exception:
         today = datetime.now(timezone.utc).date()
     span = f"{(today - timedelta(days=1)):%Y%m%d}-{(today + timedelta(days=SPORTS_LOOKAHEAD_DAYS)):%Y%m%d}"
-    url = f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{league_path}/scoreboard?{q_params}&dates={span}"
-    try:
-        return cached_get(url, 120, timeout=4.5, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-    except Exception as exc:
-        logger.warning("ESPN scoreboard failed (%s): %s", league_path, exc)
-        return None
+    attempts = [
+        (f"{base}?{q_params}&dates={span}", 8),
+        (f"{base}?{q_params}", 5),
+        (base, 5),
+    ]
+    for url, timeout in attempts:
+        try:
+            data = cached_get(url, 120, timeout=timeout, headers=_ESPN_HEADERS)
+            if isinstance(data, dict) and "events" in data:
+                _SPORTS_ERRORS.pop(league_path, None)
+                return data
+        except Exception as exc:
+            _SPORTS_ERRORS[league_path] = f"{type(exc).__name__}: {str(exc)[:120]}"
+            logger.warning("ESPN scoreboard failed (%s) for %s: %s", league_path, url, exc)
+    return None
 
 
 def _pick_game(cands, now_utc):
@@ -848,7 +863,7 @@ def fetch_live_sports_events(sport_query: str):
     if all(b is None for b in boards):
         return [{
             "title": "Live sports data is temporarily unavailable",
-            "venue": "", "time": "Please try again in a minute.", "score": "", "conditions": "", "alternatives": [],
+            "venue": "", "time": "Please try again in a minute. " + "; ".join(f"{k}: {v}" for k, v in list(_SPORTS_ERRORS.items())[:2]), "score": "", "conditions": "", "alternatives": [],
         }]
     now_utc = datetime.now(timezone.utc)
 
