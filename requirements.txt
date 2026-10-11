@@ -3,8 +3,9 @@ uvicorn
 requests
 apscheduler
 twilio
-flet
-flet-web
+flet==1.0.3
+flet-web==1.0.3
 python-dotenv
 pydantic
 flet-geolocator>=1.0.3
+tzdata

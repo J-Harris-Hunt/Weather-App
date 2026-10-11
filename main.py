@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import logging
 import flet as ft
 from datetime import datetime
 import server
@@ -39,37 +40,74 @@ async def main(page: ft.Page):
                 return cip_str
         return ""
 
+    def fmt(value, suffix=""):
+        """Show '--' for missing data instead of 'None' or an invented number."""
+        return "--" if value is None or value == "" else f"{value}{suffix}"
+
+    # Saved settings. Flet 1.x keeps them in a SharedPreferences service; older Flet used
+    # page.client_storage. Try the new one first, then the old one, and always keep an
+    # in-memory copy so the app still behaves within a single visit if storage is unavailable.
+    memory_store = {}
+    prefs_service = None
+    try:
+        if hasattr(ft, "SharedPreferences"):
+            prefs_service = ft.SharedPreferences()
+    except Exception:
+        logging.exception("SharedPreferences could not be created")
+        prefs_service = None
+
     async def storage_get(key: str):
-        try:
-            async def _inner():
-                if hasattr(page.client_storage, "get_async"):
-                    res = page.client_storage.get_async(key)
+        if prefs_service is not None:
+            try:
+                res = await asyncio.wait_for(prefs_service.get(key), timeout=1.5)
+                if res is not None:
+                    return res
+            except Exception:
+                logging.debug("SharedPreferences.get failed for %s", key, exc_info=True)
+        legacy = getattr(page, "client_storage", None)
+        if legacy is not None:
+            try:
+                async def _inner():
+                    if hasattr(legacy, "get_async"):
+                        res = legacy.get_async(key)
+                        if inspect.isawaitable(res):
+                            res = await res
+                        if res is not None:
+                            return res
+                    res = legacy.get(key)
                     if inspect.isawaitable(res):
                         res = await res
-                    if res is not None:
-                        return res
-                res = page.client_storage.get(key)
-                if inspect.isawaitable(res):
-                    res = await res
-                return res
-            return await asyncio.wait_for(_inner(), timeout=0.35)
-        except Exception:
-            return None
+                    return res
+                res = await asyncio.wait_for(_inner(), timeout=1.0)
+                if res is not None:
+                    return res
+            except Exception:
+                logging.debug("client_storage.get failed for %s", key, exc_info=True)
+        return memory_store.get(key)
 
     async def storage_set(key: str, value: str):
-        try:
-            async def _inner():
-                if hasattr(page.client_storage, "set_async"):
-                    res = page.client_storage.set_async(key, value)
+        memory_store[key] = value
+        if prefs_service is not None:
+            try:
+                await asyncio.wait_for(prefs_service.set(key, value), timeout=1.5)
+                return
+            except Exception:
+                logging.debug("SharedPreferences.set failed for %s", key, exc_info=True)
+        legacy = getattr(page, "client_storage", None)
+        if legacy is not None:
+            try:
+                async def _inner():
+                    if hasattr(legacy, "set_async"):
+                        res = legacy.set_async(key, value)
+                        if inspect.isawaitable(res):
+                            await res
+                        return
+                    res = legacy.set(key, value)
                     if inspect.isawaitable(res):
                         await res
-                    return
-                res = page.client_storage.set(key, value)
-                if inspect.isawaitable(res):
-                    await res
-            await asyncio.wait_for(_inner(), timeout=0.35)
-        except Exception:
-            pass
+                await asyncio.wait_for(_inner(), timeout=1.0)
+            except Exception:
+                logging.debug("client_storage.set failed for %s", key, exc_info=True)
 
     app_header = ft.Container(
         content=ft.Row([
@@ -374,9 +412,9 @@ async def main(page: ft.Page):
             width=360,
             content=ft.Column([
                 ft.Row([
-                    ft.Text(f"High: {day_info.get('high')}°F", size=15, color="red300", weight=ft.FontWeight.BOLD),
-                    ft.Text(f"Low: {day_info.get('low')}°F", size=15, color="blue300", weight=ft.FontWeight.BOLD),
-                    ft.Text(f"Rain: {day_info.get('rain_prob_max')}%", size=14, color="cyan300", weight=ft.FontWeight.BOLD),
+                    ft.Text(f"High: {fmt(day_info.get('high'))}°F", size=15, color="red300", weight=ft.FontWeight.BOLD),
+                    ft.Text(f"Low: {fmt(day_info.get('low'))}°F", size=15, color="blue300", weight=ft.FontWeight.BOLD),
+                    ft.Text(f"Rain: {fmt(day_info.get('rain_prob_max'), '%')}", size=14, color="cyan300", weight=ft.FontWeight.BOLD),
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Divider(height=10, color="grey800"),
                 ft.Text("☀️ Daytime Conditions", size=13, weight=ft.FontWeight.BOLD, color="amber200"),
@@ -386,12 +424,12 @@ async def main(page: ft.Page):
                 ft.Text(day_info.get("night_summary", ""), size=12, color="white"),
                 ft.Divider(height=10, color="grey800"),
                 ft.Row([
-                    ft.Text(f"🌅 Rise: {day_info.get('sunrise')}", size=11, color="amber100"),
-                    ft.Text(f"🌇 Set: {day_info.get('sunset')}", size=11, color="amber100"),
+                    ft.Text(f"🌅 Rise: {fmt(day_info.get('sunrise'))}", size=11, color="amber100"),
+                    ft.Text(f"🌇 Set: {fmt(day_info.get('sunset'))}", size=11, color="amber100"),
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Row([
-                    ft.Text(f"🌕 Moon: {day_info.get('moon_rise')}", size=11, color="cyan200"),
-                    ft.Text(f"🌑 Set: {day_info.get('moon_set')}", size=11, color="cyan200"),
+                    ft.Text(f"🌕 Moonrise: {fmt(day_info.get('moon_rise'))}", size=11, color="cyan200"),
+                    ft.Text(f"🌑 Moonset: {fmt(day_info.get('moon_set'))}", size=11, color="cyan200"),
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ], spacing=6, tight=True)
         )
@@ -406,7 +444,7 @@ async def main(page: ft.Page):
             search_box = ft.Container(
                 content=ft.Row([
                     sports_input,
-                    ft.IconButton(icon=ft.Icons.SEARCH, on_click=lambda e: page.run_task(load_weather_manual), icon_color="amber300", tooltip="Search Teams"),
+                    ft.IconButton(icon=ft.Icons.SEARCH, on_click=lambda e: page.run_task(refresh_sports), icon_color="amber300", tooltip="Search Teams"),
                     ft.IconButton(icon=ft.Icons.TUNE, on_click=open_team_picker, icon_color="cyan300", tooltip="Choose from Team List")
                 ], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
                 bgcolor="#1c1f26", padding=8, border_radius=8
@@ -414,7 +452,11 @@ async def main(page: ft.Page):
             cards.append(search_box)
 
         if not cat_data or not isinstance(cat_data, dict):
-            cards.append(ft.Text("Awaiting location to generate environmental insight.", color="grey400", size=13))
+            if latest_weather_data:
+                msg = "No data for this category right now. Try refreshing in a moment."
+            else:
+                msg = "Awaiting location to generate environmental insight."
+            cards.append(ft.Text(msg, color="grey400", size=13))
             return cards
 
         for key, val in cat_data.items():
@@ -540,15 +582,19 @@ async def main(page: ft.Page):
 
                     card_content = [
                         ft.Row(header_items, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                        ft.Row([
+                    ]
+                    if ev.get("time"):
+                        card_content.append(ft.Row([
                             ft.Icon(ft.Icons.SCHEDULE, size=14, color="cyan200"),
                             ft.Text(f"{ev.get('time', '')}", size=12, color="cyan200", weight=ft.FontWeight.W_500, expand=True)
-                        ], spacing=6),
-                        ft.Row([
+                        ], spacing=6))
+                    if ev.get("venue"):
+                        card_content.append(ft.Row([
                             ft.Icon(ft.Icons.LOCATION_ON, size=14, color="grey400"),
                             ft.Text(ev.get('venue', ''), size=12, color="grey300", expand=True)
-                        ], spacing=6),
-                        ft.Container(
+                        ], spacing=6))
+                    if ev.get("conditions"):
+                        card_content.append(ft.Container(
                             content=ft.Row([
                                 ft.Icon(ft.Icons.WB_SUNNY, size=14, color="green300"),
                                 ft.Text(ev.get('conditions', ''), size=12, color="green200", weight=ft.FontWeight.W_500, expand=True)
@@ -557,8 +603,7 @@ async def main(page: ft.Page):
                             border=ft.Border.all(1, "cyan900"),
                             border_radius=6,
                             padding=ft.Padding(8, 6, 8, 6)
-                        )
-                    ]
+                        ))
 
                     alts = ev.get("alternatives", [])
                     if alts:
@@ -623,7 +668,7 @@ async def main(page: ft.Page):
                                     ft.Text(c.get("title", ""), size=13, weight=ft.FontWeight.BOLD, color="amber200", expand=True),
                                     ft.Text(f"⏰ {c.get('time', '')}", size=12, color="cyan200", weight=ft.FontWeight.BOLD)
                                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                                ft.Text(f"🔭 Direction: {c.get('direction', '')}", size=11, color="grey300"),
+                                *([ft.Text(f"🔭 Direction: {c.get('direction')}", size=11, color="grey300")] if c.get('direction') else []),
                                 ft.Text(f"✨ {c.get('notes', '')}", size=11, color="green200")
                             ], spacing=3),
                             bgcolor="#1c1f26", padding=8, border_radius=6
@@ -699,6 +744,13 @@ async def main(page: ft.Page):
 
     category_buttons_row = ft.Row(controls=category_chips, spacing=8, scroll=ft.ScrollMode.ADAPTIVE)
 
+    async def refresh_sports(e=None):
+        """Re-run the forecast with the new team list WITHOUT changing the saved location mode."""
+        if not location_input.value.strip():
+            return
+        mode = await storage_get("tmw_location_mode")
+        await load_weather(is_auto=(mode != "manual"))
+
     async def handle_autodetect_click(e=None):
         await storage_set("tmw_location_mode", "auto")
         await storage_set("tmw_saved_location", "")
@@ -745,7 +797,6 @@ async def main(page: ft.Page):
         await storage_set("tmw_saved_teams", teams)
 
         try:
-            import server
             res = await asyncio.to_thread(server.get_full_weather_data, loc, teams)
             name = res.get("location_name", loc)
 
@@ -754,9 +805,11 @@ async def main(page: ft.Page):
 
             location_display_text.value = f"📍 {name}"
             curr = res.get("current", {})
-            condition = curr.get("condition", "Sunny")
-            t_val = curr.get("temp", 74)
-            feels_val = curr.get("feels_like", curr.get("heat_index", t_val))
+            condition = curr.get("condition") or "--"
+            t_val = curr.get("temp")
+            feels_val = curr.get("feels_like")
+            if feels_val is None:
+                feels_val = curr.get("heat_index")
 
             if "radar_url" in res:
                 radar_button_widget.url = res["radar_url"]
@@ -770,44 +823,45 @@ async def main(page: ft.Page):
             widget_hero_icon.color = "cyan200" if is_night else "amber300"
 
             condition_text.value = condition
-            curr_temp_text.value = f"{t_val}°F"
-            feels_like_text.value = f"Feels Like: {feels_val}°F"
-            humidity_text.value = f"Humidity: {curr.get('humidity', 51)}%"
-            wind_text.value = f"Wind: {curr.get('wind', 7)} mph"
-            uv_val = curr.get("uv_index", 4.0)
+            curr_temp_text.value = f"{fmt(t_val)}°F"
+            feels_like_text.value = f"Feels Like: {fmt(feels_val)}°F"
+            humidity_text.value = f"Humidity: {fmt(curr.get('humidity'), '%')}"
+            wind_text.value = f"Wind: {fmt(curr.get('wind'))} mph"
+            uv_val = fmt(curr.get("uv_index"))
             uv_badge.value = f"UV: {uv_val}"
 
             aqi_obj = res.get("aqi", {})
             if isinstance(aqi_obj, dict):
-                aqi_num = aqi_obj.get("value", aqi_obj.get("aqi", "--"))
-                aqi_cat = aqi_obj.get("category", "")
+                aqi_raw = aqi_obj.get("value", aqi_obj.get("aqi"))
+                aqi_num = fmt(aqi_raw)
+                aqi_cat = aqi_obj.get("category", "") if aqi_raw is not None else ""
                 aqi_str = f"AQI: {aqi_num} ({aqi_cat})" if aqi_cat else f"AQI: {aqi_num}"
                 widget_aqi_str = f"🍃 AQI {aqi_num} ({aqi_cat})" if aqi_cat else f"🍃 AQI {aqi_num}"
             else:
-                aqi_str = f"AQI: {aqi_obj}"
-                widget_aqi_str = f"🍃 AQI {aqi_obj}"
+                aqi_str = f"AQI: {fmt(aqi_obj)}"
+                widget_aqi_str = f"🍃 AQI {fmt(aqi_obj)}"
 
             aqi_badge.value = aqi_str
             widget_aqi_badge.value = widget_aqi_str
             widget_uv_badge.value = f"☀️ UV {uv_val}"
 
-            sunrise_text.value = f"🌅 Sunrise: {curr.get('sunrise')}"
-            sunset_text.value = f"🌇 Sunset: {curr.get('sunset')}"
-            moonrise_text.value = f"🌕 Moonrise: {curr.get('moon_rise')}"
-            moonset_text.value = f"🌑 Moonset: {curr.get('moon_set')}"
+            sunrise_text.value = f"🌅 Sunrise: {fmt(curr.get('sunrise'))}"
+            sunset_text.value = f"🌇 Sunset: {fmt(curr.get('sunset'))}"
+            moonrise_text.value = f"🌕 Moonrise: {fmt(curr.get('moon_rise'))}"
+            moonset_text.value = f"🌑 Moonset: {fmt(curr.get('moon_set'))}"
 
-            current_precip_text.value = curr.get("precip_summary", "Precip Now: 0% | Next 24h Max: 0%")
-            rain_duration_text.value = curr.get("rain_duration", "Zero precipitation expected.")
+            current_precip_text.value = curr.get("precip_summary") or "Precip: --"
+            rain_duration_text.value = curr.get("rain_duration") or ""
 
             widget_loc_text.value = name
             widget_condition_text.value = condition
-            widget_temp_text.value = f"{t_val}°"
+            widget_temp_text.value = f"{fmt(t_val)}°"
 
             daily_data = res.get("daily", [])
             if daily_data:
                 first = daily_data[0]
-                widget_hl_text.value = f"H: {first.get('high')}°  L: {first.get('low')}°"
-                widget_rain_badge.value = f"💧 {first.get('rain_prob_max')}% Precip"
+                widget_hl_text.value = f"H: {fmt(first.get('high'))}°  L: {fmt(first.get('low'))}°"
+                widget_rain_badge.value = f"💧 {fmt(first.get('rain_prob_max'), '%')} Precip"
 
             hourly_cards = []
             for item in res.get("hourly_36", []):
@@ -817,12 +871,14 @@ async def main(page: ft.Page):
                         content=ft.Column([
                             ft.Text(str(item.get("time")), size=11, color="amber200", weight=ft.FontWeight.BOLD),
                             ft.Icon(ft.Icons.NIGHTLIGHT_ROUND if h_night else ft.Icons.WB_SUNNY, size=20, color="cyan200" if h_night else "amber300"),
-                            ft.Text(f"{item.get('temp')}°", size=13, weight=ft.FontWeight.BOLD, color="white"),
-                            ft.Row([ft.Icon(ft.Icons.WATER_DROP, size=10, color="cyan300"), ft.Text(f"{item.get('rain_chance')}%", size=10, color="cyan300")], alignment=ft.MainAxisAlignment.CENTER),
+                            ft.Text(f"{fmt(item.get('temp'))}°", size=13, weight=ft.FontWeight.BOLD, color="white"),
+                            ft.Row([ft.Icon(ft.Icons.WATER_DROP, size=10, color="cyan300"), ft.Text(fmt(item.get('rain_chance'), '%'), size=10, color="cyan300")], alignment=ft.MainAxisAlignment.CENTER),
                         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4),
                         width=75, height=130, padding=6, border_radius=8, bgcolor="#252830",
                     )
                 )
+            if not hourly_cards:
+                hourly_cards = [ft.Text("Hourly forecast unavailable right now.", size=12, color="grey400")]
             hourly_row.controls = hourly_cards
 
             day_cards = []
@@ -837,24 +893,24 @@ async def main(page: ft.Page):
                             ft.Text(day.get("date", ""), size=12, weight=ft.FontWeight.BOLD, color="amber200"),
                             ft.Container(
                                 content=ft.Row([
-                                    ft.Text(f"↑ {day.get('high')}°", size=13, color="red300", weight=ft.FontWeight.BOLD),
-                                    ft.Text(f"↓ {day.get('low')}°", size=13, color="blue300", weight=ft.FontWeight.BOLD),
+                                    ft.Text(f"↑ {fmt(day.get('high'))}°", size=13, color="red300", weight=ft.FontWeight.BOLD),
+                                    ft.Text(f"↓ {fmt(day.get('low'))}°", size=13, color="blue300", weight=ft.FontWeight.BOLD),
                                 ], alignment=ft.MainAxisAlignment.SPACE_AROUND),
                                 bgcolor="#1c1f26", padding=4, border_radius=6,
                             ),
                             ft.Container(
                                 content=ft.Column([
-                                    ft.Row([ft.Text(f"🌅 {day.get('sunrise')}", size=10, color="amber100"), ft.Text(f"🌇 {day.get('sunset')}", size=10, color="amber100")], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                                    ft.Row([ft.Text(f"🌕 {day.get('moon_rise')}", size=10, color="cyan200"), ft.Text(f"🌑 {day.get('moon_set')}", size=10, color="cyan200")], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                    ft.Row([ft.Text(f"🌅 {fmt(day.get('sunrise'))}", size=10, color="amber100"), ft.Text(f"🌇 {fmt(day.get('sunset'))}", size=10, color="amber100")], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                    ft.Row([ft.Text(f"🌕 {fmt(day.get('moon_rise'))}", size=10, color="cyan200"), ft.Text(f"🌑 {fmt(day.get('moon_set'))}", size=10, color="cyan200")], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                                 ], spacing=2),
                                 bgcolor="#1c1f26", padding=4, border_radius=6,
                             ),
                             ft.Column([
-                                ft.Row([ft.Text("Day", size=11, color="amber200", weight=ft.FontWeight.BOLD), ft.Text(f"💧 {day.get('day_rain_prob')}%", size=11, color="cyan300", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ft.Row([ft.Text("Day", size=11, color="amber200", weight=ft.FontWeight.BOLD), ft.Text(f"💧 {fmt(day.get('day_rain_prob'), '%')}", size=11, color="cyan300", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                                 ft.Text(day.get("day_summary", ""), size=11, color="grey300", max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
                             ], spacing=2),
                             ft.Column([
-                                ft.Row([ft.Text("Night", size=11, color="cyan200", weight=ft.FontWeight.BOLD), ft.Text(f"💧 {day.get('night_rain_prob')}%", size=11, color="cyan300", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ft.Row([ft.Text("Night", size=11, color="cyan200", weight=ft.FontWeight.BOLD), ft.Text(f"💧 {fmt(day.get('night_rain_prob'), '%')}", size=11, color="cyan300", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                                 ft.Text(day.get("night_summary", ""), size=11, color="grey300", max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
                             ], spacing=2),
                             ft.Container(
@@ -868,13 +924,20 @@ async def main(page: ft.Page):
             forecast_row.controls = day_cards
             category_cards_column.controls = build_cards_for_category(current_selected_category[0])
             page.update()
-        except Exception as ex:
-            condition_text.value = "Location not found"
-            location_display_text.value = f"📍 {ex}"
+        except server.HTTPException as ex:
+            # Errors the server raised on purpose, with a message written for people.
+            condition_text.value = "Location not found" if ex.status_code == 404 else "Weather unavailable"
+            location_display_text.value = f"📍 {ex.detail}"
+            page.update()
+        except Exception:
+            # A real bug (for example in how the screen is drawn): log it, and don't blame the location.
+            logging.exception("Failed while loading or drawing weather")
+            condition_text.value = "Something went wrong"
+            location_display_text.value = "📍 The weather loaded but couldn't be displayed. Please try again."
             page.update()
 
     location_input.on_submit = load_weather_manual
-    sports_input.on_submit = load_weather_manual
+    sports_input.on_submit = refresh_sports
 
     search_row = ft.Row([
         location_input,

@@ -1,8 +1,13 @@
 {
   "name": "Thick Moose Weather",
   "short_name": "Thick Moose Weather",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "any",
+  "lang": "en-US",
+  "categories": ["weather"],
   "background_color": "#16202c",
   "theme_color": "#16202c",
   "description": "Hyper-local microclimate weather dashboard",
