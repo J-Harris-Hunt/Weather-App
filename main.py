@@ -1267,28 +1267,132 @@ async def main(page: ft.Page):
         padding=16, border_radius=16, bgcolor=CARD, border=ft.Border.all(1, BORDER),
     )
 
-    full_dashboard = ft.Column([
-        app_header,
-        search_row,
-        location_display_text,
-        ft.Container(height=6),
+    # ---- bottom tabs: Today / Forecast / Explore / More ----
+    explore_info = {
+        "weather_climate": ("Weather & Climate", ft.Icons.THERMOSTAT, "Alerts, tides, ENSO, local climate"),
+        "outdoor_activities": ("Outdoor Activities", ft.Icons.DIRECTIONS_RUN, "Beach, hiking, boating, fishing and more"),
+        "lifestyle": ("Lifestyle", ft.Icons.LOCAL_CAFE, "Clothing, UV, air, home, garden"),
+        "sporting_event": ("Sporting Events", ft.Icons.SPORTS_SOCCER, "Your teams and game-time weather"),
+        "astronomy": ("Astronomy", ft.Icons.NIGHTLIGHT_ROUND, "Moon, planets, dark skies, meteors"),
+    }
+    explore_title_text = ft.Text("", size=18, weight=ft.FontWeight.BOLD, color="amber300")
+
+    async def scroll_top():
+        try:
+            await page.scroll_to(offset=0, duration=0)
+        except Exception:
+            logging.debug("scroll_to unavailable", exc_info=True)
+
+    def open_category(key):
+        current_selected_category[0] = key
+        label = explore_info.get(key, (key,))[0]
+        explore_title_text.value = label
+        category_cards_column.controls = build_cards_for_category(key)
+        explore_home.visible = False
+        explore_detail.visible = True
+        page.update()
+        page.run_task(scroll_top)
+
+    def close_category(e=None):
+        explore_home.visible = True
+        explore_detail.visible = False
+        page.update()
+
+    def explore_tile(key):
+        label, icon, blurb = explore_info[key]
+        return ft.Container(
+            data=key, expand=True, ink=True, on_click=lambda e, k=key: open_category(k),
+            bgcolor=CARD, border=ft.Border.all(1, BORDER), border_radius=16, padding=16,
+            content=ft.Column([
+                ft.Icon(icon, size=28, color="amber300"),
+                ft.Text(label, size=14, weight=ft.FontWeight.BOLD, color="white"),
+                ft.Text(blurb, size=11, color=MUTED),
+            ], spacing=6),
+        )
+
+    _keys = list(explore_info.keys())
+    _tile_rows = []
+    for i in range(0, len(_keys), 2):
+        pair = [explore_tile(k) for k in _keys[i:i + 2]]
+        if len(pair) == 1:
+            pair.append(ft.Container(expand=True))
+        _tile_rows.append(ft.Row(pair, spacing=12))
+
+    explore_home = ft.Column([section_title("Explore")] + _tile_rows, spacing=12, visible=True)
+    explore_detail = ft.Column([
+        ft.Row([
+            ft.IconButton(icon=ico("ARROW_BACK", "KEYBOARD_ARROW_LEFT"), icon_color="amber300", on_click=close_category, tooltip="Back"),
+            explore_title_text,
+        ], spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        category_display_container,
+    ], spacing=8, visible=False)
+
+    tab_today = ft.Column([
         ft.Row([photorealistic_2x2_widget]),
         ft.Container(height=10),
         details_card,
         ft.Container(height=10),
         radar_container,
+    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, visible=True)
+
+    tab_forecast = ft.Column([
         section_title("Hourly forecast · next 36 hours"),
         hourly_container,
         section_title("5-day forecast · tap a day for details"),
         forecast_container,
-        section_title("Activity & lifestyle"),
-        category_buttons_row,
-        ft.Container(height=4),
-        category_display_container,
-        ft.Divider(height=24, color=BORDER),
+    ], visible=False)
+
+    tab_explore = ft.Column([explore_home, explore_detail], visible=False)
+
+    tab_more = ft.Column([
+        ft.Container(height=10),
         ft.Row([keep_weather_free_badge], alignment=ft.MainAxisAlignment.CENTER),
         ft.Container(height=10),
         feedback_section,
+    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, visible=False)
+
+    tab_views = [tab_today, tab_forecast, tab_explore, tab_more]
+
+    async def on_tab_change(e):
+        try:
+            idx = int(e.control.selected_index)
+        except Exception:
+            idx = 0
+        for i, view in enumerate(tab_views):
+            view.visible = (i == idx)
+        if idx == 2:
+            explore_home.visible = True      # the Explore tab always opens on its list
+            explore_detail.visible = False
+        page.update()
+        await scroll_top()
+
+    try:
+        page.navigation_bar = ft.NavigationBar(
+            selected_index=0,
+            on_change=on_tab_change,
+            destinations=[
+                ft.NavigationBarDestination(icon=ico("WB_SUNNY", "HOME"), label="Today"),
+                ft.NavigationBarDestination(icon=ico("CALENDAR_MONTH", "SCHEDULE"), label="Forecast"),
+                ft.NavigationBarDestination(icon=ico("EXPLORE", "APPS"), label="Explore"),
+                ft.NavigationBarDestination(icon=ico("MORE_HORIZ", "MENU"), label="More"),
+            ],
+        )
+    except Exception:
+        # If the tab bar can't be built, fall back to one long page so nothing is hidden.
+        logging.exception("Navigation bar could not be created")
+        for view in tab_views:
+            view.visible = True
+
+    full_dashboard = ft.Column([
+        app_header,
+        search_row,
+        location_display_text,
+        ft.Container(height=6),
+        tab_today,
+        tab_forecast,
+        tab_explore,
+        tab_more,
+        ft.Container(height=20),
     ], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
     page.add(full_dashboard)
