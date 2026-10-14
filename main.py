@@ -466,12 +466,12 @@ async def main(page: ft.Page):
     current_precip_text = ft.Text("Precip Now: --% | Next 24h Max: --%", size=14, color="cyan300", weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
     rain_duration_text = ft.Text("Retrieving local radar & metrics...", size=13, color="amber100", text_align=ft.TextAlign.CENTER)
 
-    radar_timestamp_text = ft.Text("Live radar • synced", size=11, color="green300", weight=ft.FontWeight.W_600)
+    radar_timestamp_text = ft.Text("Updated just now", size=11, color="green300", weight=ft.FontWeight.W_600)
 
     radar_button_widget = ft.Container(
         content=ft.Row([
             ft.Icon(ft.Icons.RADAR, color="black", size=18),
-            ft.Text("Open Full Interactive Radar", color="black", weight=ft.FontWeight.BOLD, size=13),
+            ft.Text("Open radar map", color="black", weight=ft.FontWeight.BOLD, size=13),
         ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
         bgcolor="amber400",
         border_radius=10,
@@ -484,9 +484,9 @@ async def main(page: ft.Page):
         content=ft.Column([
             ft.Row([
                 ft.Icon(ft.Icons.SATELLITE_ALT, color="cyan300", size=18),
-                ft.Text("Live High-Resolution Doppler Radar", size=14, weight=ft.FontWeight.BOLD, color="amber300"),
+                ft.Text("Radar", size=14, weight=ft.FontWeight.BOLD, color="amber300"),
             ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
-            ft.Text("Past 2 hours + predicted nowcast path with pinned location", size=11, color="grey400", text_align=ft.TextAlign.CENTER),
+            ft.Text("Past 2 hours and short-term outlook, with your location pinned", size=11, color="grey400", text_align=ft.TextAlign.CENTER),
             radar_timestamp_text,
             ft.Container(height=4),
             radar_button_widget,
@@ -1042,7 +1042,7 @@ async def main(page: ft.Page):
             if "radar_url" in res:
                 radar_button_widget.url = res["radar_url"]
             radar_time_val = res.get("radar_time", datetime.now().strftime("%I:%M %p").lstrip("0"))
-            radar_timestamp_text.value = f"🟢 Live Radar Scan • Synced at {radar_time_val}"
+            radar_timestamp_text.value = f"Weather updated at {radar_time_val}"
 
             is_night = curr.get("is_night", False)
             hero_icon_name, hero_icon_color = condition_icon(condition, is_night)
