@@ -1967,6 +1967,49 @@ def api_weather(query: str = "", sport_team: str = "Carolina Panthers, Atlanta B
     except Exception:
         logger.exception("Unexpected error building weather data")
         raise HTTPException(status_code=500, detail="Something went wrong loading the weather. Please try again.")
+PRIVACY_POLICY_HTML = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thick Moose Weather - Privacy Policy</title>
+<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:720px;margin:0 auto;padding:24px 18px 60px;line-height:1.6;color:#1a1d24;background:#fff}
+h1{font-size:1.6rem}h2{font-size:1.1rem;margin-top:1.6em}a{color:#0b5fd1}.muted{color:#5b6472}
+@media (prefers-color-scheme: dark){body{background:#12151b;color:#e8ebf1}.muted{color:#9aa7bd}a{color:#7fb2ff}}</style></head>
+<body>
+<h1>Thick Moose Weather Privacy Policy</h1>
+<p class="muted">Last updated: October 13, 2026</p>
+<p>Thick Moose Weather ("the app") is made by Thick Moose Labs. This policy explains what the app does with your information. Contact: <a href="mailto:contact@thickmooselabs.com">contact@thickmooselabs.com</a></p>
+<h2>What we collect</h2>
+<ul>
+<li><b>Location.</b> If you allow it, the app uses your phone's precise location (GPS) to show weather for where you are. Your coordinates are sent to our server, which uses them to request forecasts, alerts, tide and place-name information from weather and mapping providers (including Open-Meteo, the U.S. National Weather Service, NOAA and OpenStreetMap) and returns the result to you. You can decline location access and type a city or ZIP code instead.</li>
+<li><b>Places and teams you type.</b> A city, ZIP code or sports team you enter is used to look up weather and schedules.</li>
+<li><b>Settings on your device.</b> The app saves your location mode, saved location and selected teams on your device so they are remembered next time. Clearing app data or uninstalling deletes them.</li>
+</ul>
+<h2>What we don't do</h2>
+<ul>
+<li>We don't require an account.</li>
+<li>We don't show ads or sell your data.</li>
+<li>We don't use your location for advertising or share it for marketing.</li>
+<li>We don't build a profile of you or keep a history of your locations. Our hosting provider may keep standard technical server logs for a short time.</li>
+</ul>
+<h2>Third parties</h2>
+<p>To provide weather, your coordinates or the place you search for are sent to the data providers above, only to return results. We don't send your name, email or device identifiers to them. These providers have their own privacy policies.</p>
+<h2>Security</h2>
+<p>Data between the app and our server is sent over HTTPS.</p>
+<h2>Your choices</h2>
+<p>You can turn off location access at any time in your phone's settings. To ask about or request deletion of any data, email <a href="mailto:contact@thickmooselabs.com">contact@thickmooselabs.com</a>.</p>
+<h2>Children</h2>
+<p>The app isn't directed to children under 13 and doesn't knowingly collect their personal information.</p>
+<h2>Changes</h2>
+<p>If we change this policy, we will update the date above.</p>
+<h2>Contact</h2>
+<p><a href="mailto:contact@thickmooselabs.com">contact@thickmooselabs.com</a></p>
+</body></html>"""
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy_policy():
+    return HTMLResponse(PRIVACY_POLICY_HTML)
+
+
 @app.get("/.well-known/assetlinks.json", response_class=FileResponse)
 async def serve_assetlinks():
     assetlinks_path = Path(__file__).resolve().parent / "assets" / "assetlinks.json"
