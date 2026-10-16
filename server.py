@@ -41,18 +41,41 @@ _POOL = ThreadPoolExecutor(max_workers=16)          # one weather request's inde
 _SPORTS_POOL = ThreadPoolExecutor(max_workers=8)    # leaf work for sports (kept separate to avoid pool deadlock)
 
 
-def cached_get(url, ttl, timeout=3.5, headers=None, as_text=False):
+def cached_get(url, ttl, timeout=3.5, headers=None, as_text=False, retries=0, stale_ok=0):
     """GET a URL and return JSON (or text). Results are reused for `ttl` seconds.
-    Raises on network errors / non-200 so callers can show an honest 'unavailable'."""
+    retries: extra attempts after a network error, timeout, 429 or 5xx (short pause between).
+    stale_ok: if every attempt fails, an older saved copy up to this many seconds old is returned instead.
+    Otherwise raises on network errors / non-200 so callers can show an honest 'unavailable'."""
     key = (url, as_text)
     now = time.time()
     with _CACHE_LOCK:
         hit = _CACHE.get(key)
         if hit and now - hit[0] < ttl:
             return hit[1]
-    resp = requests.get(url, headers=headers, timeout=timeout)
-    resp.raise_for_status()
-    data = resp.text if as_text else resp.json()
+    last_exc = None
+    data = None
+    for attempt in range(retries + 1):
+        try:
+            resp = requests.get(url, headers=headers, timeout=timeout)
+            if resp.status_code == 429 or resp.status_code >= 500:
+                resp.raise_for_status()
+            resp.raise_for_status()
+            data = resp.text if as_text else resp.json()
+            last_exc = None
+            break
+        except Exception as exc:
+            last_exc = exc
+            retryable = not isinstance(exc, requests.HTTPError) or (
+                getattr(exc.response, "status_code", 0) in (429,) or getattr(exc.response, "status_code", 0) >= 500)
+            if attempt < retries and retryable:
+                time.sleep(0.6 * (attempt + 1))
+                continue
+            break
+    if last_exc is not None:
+        if stale_ok and hit and now - hit[0] < stale_ok:
+            logger.warning("Using a saved copy (%ds old) because the request failed: %s", int(now - hit[0]), last_exc)
+            return hit[1]
+        raise last_exc
     with _CACHE_LOCK:
         if len(_CACHE) > 400:
             for k in [k for k, v in _CACHE.items() if now - v[0] > 3600]:
@@ -1062,7 +1085,7 @@ def fetch_comprehensive_weather(lat: float, lon: float):
             f"&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max,sunrise,sunset"
             f"&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=7"
         )
-        om_res = cached_get(om_url, 120, timeout=5)
+        om_res = cached_get(om_url, 120, timeout=6, retries=2, stale_ok=3600)
         try:
             resolved_tz = ZoneInfo(om_res.get("timezone") or "")
         except Exception:
