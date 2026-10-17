@@ -1,6 +1,7 @@
 import asyncio
 import re
 import inspect
+import urllib.parse
 import logging
 import flet as ft
 try:
@@ -423,6 +424,8 @@ async def main(page: ft.Page):
     widget_moon_text = ft.Text("🌙", size=72, visible=False)
     widget_temp_text = ft.Text("--°", size=72, weight=ft.FontWeight.BOLD, color="white")
     widget_hl_text = ft.Text("H: --°  L: --°", size=13, weight=ft.FontWeight.W_600, color="grey300")
+    updated_badge_text = ft.Text("Updating…", size=10, weight=ft.FontWeight.BOLD, color="amber300")
+    data_source_text = ft.Text("", size=10, color="grey300")
     widget_rain_badge = ft.Text("--% precip", size=12, color="cyan200", weight=ft.FontWeight.W_600)
     widget_uv_badge = ft.Text("UV --", size=12, color="orange200", weight=ft.FontWeight.W_600)
     widget_aqi_badge = ft.Text("AQI --", size=12, color="green300", weight=ft.FontWeight.W_600)
@@ -1043,6 +1046,8 @@ async def main(page: ft.Page):
                 radar_button_widget.url = res["radar_url"]
             radar_time_val = res.get("radar_time", datetime.now().strftime("%I:%M %p").lstrip("0"))
             radar_timestamp_text.value = f"Weather updated at {radar_time_val}"
+            updated_badge_text.value = f"Updated {radar_time_val}"
+            data_source_text.value = f"Now: {curr.get('data_source')}" if curr.get("data_source") else ""
 
             is_night = curr.get("is_night", False)
             hero_icon_name, hero_icon_color = condition_icon(condition, is_night)
@@ -1197,7 +1202,7 @@ async def main(page: ft.Page):
     hero_content = ft.Column([
                 ft.Row([
                     ft.Column([widget_loc_text, widget_condition_text], spacing=2, expand=True),
-                    ft.Container(content=ft.Text("LIVE", size=10, weight=ft.FontWeight.BOLD, color="amber300"), bgcolor="rgba(255, 193, 7, 0.15)", padding=ft.Padding(8, 4, 8, 4), border_radius=12)
+                    ft.Container(content=updated_badge_text, bgcolor="rgba(255, 193, 7, 0.15)", padding=ft.Padding(8, 4, 8, 4), border_radius=12)
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.START),
                 ft.Row([
                     ft.Column([widget_temp_text, feels_like_text, widget_hl_text], spacing=2),
@@ -1210,6 +1215,7 @@ async def main(page: ft.Page):
                     stat_chip(ico("OPACITY", "WATER_DROP"), humidity_text, "rgba(0, 229, 255, 0.08)", "cyan200"),
                     stat_chip(ico("AIR"), wind_text, "rgba(0, 229, 255, 0.08)", "cyan200"),
                 ], wrap=True, spacing=8, run_spacing=8),
+                data_source_text,
             ], spacing=14)
     hero_stack = ft.Stack([hero_photo_layer, hero_scrim, ft.Container(content=hero_content, padding=20)])
 
@@ -1242,10 +1248,74 @@ async def main(page: ft.Page):
             expand=True, ink=True, tooltip=title, url=url,
         )
 
+    # ---- Rate / Share ----
+    PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.thickmooselabs.weather"
+    SHARE_URL = "https://weather.thickmooselabs.com"
+    SHARE_TEXT = "Try Thick Moose Weather: free, ad-free, hyper-local weather for exactly where you are. " + SHARE_URL
+    share_sheet_busy = [False]
+
+    async def _maybe_await(value):
+        if inspect.isawaitable(value):
+            return await value
+        return value
+
+    async def _notify(message):
+        try:
+            await _maybe_await(page.show_dialog(ft.SnackBar(ft.Text(message))))
+        except Exception:
+            logging.debug("snackbar unavailable", exc_info=True)
+
+    async def share_app(e=None):
+        """Native share sheet if this Flet build has one, else copy the link, else open an email draft."""
+        if share_sheet_busy[0]:
+            return
+        share_sheet_busy[0] = True
+        try:
+            share_cls = getattr(ft, "Share", None)
+            if share_cls is not None:
+                try:
+                    svc = share_cls()
+                    await _maybe_await(svc.share_text(SHARE_TEXT, title="Thick Moose Weather"))
+                    return
+                except Exception:
+                    logging.debug("native share unavailable", exc_info=True)
+            clip_cls = getattr(ft, "Clipboard", None)
+            try:
+                if clip_cls is not None:
+                    await _maybe_await(clip_cls().set(SHARE_TEXT))
+                else:
+                    await _maybe_await(page.set_clipboard(SHARE_TEXT))
+                await _notify("Link copied. Paste it into a message to share.")
+                return
+            except Exception:
+                logging.debug("clipboard unavailable", exc_info=True)
+            mail = ("mailto:?subject=" + urllib.parse.quote("Thick Moose Weather")
+                    + "&body=" + urllib.parse.quote(SHARE_TEXT))
+            try:
+                await _maybe_await(page.launch_url(mail))
+            except Exception:
+                logging.debug("mailto fallback failed", exc_info=True)
+        finally:
+            share_sheet_busy[0] = False
+
+    def action_card(icon, title, subtitle, color, url=None, on_click=None):
+        card = feedback_card(icon, title, subtitle, color, url or "")
+        if url is None:
+            card.url = None
+        if on_click is not None:
+            card.on_click = on_click
+        return card
+
     feedback_section = ft.Container(
-        content=ft.Row([
-            feedback_card(ico("FAVORITE_BORDER", "FAVORITE"), "Send feedback", "Suggestions & praise", "green300", praise_mailto),
-            feedback_card(ico("BUG_REPORT", "REPORT_PROBLEM"), "Report a problem", "Something look wrong?", "orange300", complaints_mailto),
+        content=ft.Column([
+            ft.Row([
+                action_card(ico("STAR_BORDER", "STAR"), "Rate this app", "Leave a review on Google Play", "amber300", url=PLAY_STORE_URL),
+                action_card(ico("SHARE"), "Share with friends", "Send the link to someone", "blue300", on_click=share_app),
+            ], spacing=12),
+            ft.Row([
+                feedback_card(ico("FAVORITE_BORDER", "FAVORITE"), "Send feedback", "Suggestions & praise", "green300", praise_mailto),
+                feedback_card(ico("BUG_REPORT", "REPORT_PROBLEM"), "Report a problem", "Something look wrong?", "orange300", complaints_mailto),
+            ], spacing=12),
         ], spacing=12),
         padding=ft.Padding(0, 10, 0, 30),
     )
