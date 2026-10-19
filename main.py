@@ -302,7 +302,7 @@ async def main(page: ft.Page):
         content=ft.Row([
             ft.Container(
                 content=ft.Image(
-                    src="/moose.png",
+                    src="/moose.jpg",
                     width=54,
                     height=54,
                     fit="cover",
@@ -349,7 +349,7 @@ async def main(page: ft.Page):
             content=ft.Column([
                 ft.Container(
                     content=ft.Image(
-                        src="/donation_dog.png",
+                        src="/donation_dog.jpg",
                         width=280,
                         height=280,
                         fit="cover",
@@ -393,7 +393,7 @@ async def main(page: ft.Page):
         content=ft.Row([
             ft.Container(
                 content=ft.Image(
-                    src="/donation_dog.png",
+                    src="/donation_dog.jpg",
                     width=42,
                     height=42,
                     fit="cover",
