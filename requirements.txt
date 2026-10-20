@@ -1,4 +1,4 @@
-fastapi
+fastapi<0.145  # 0.145+ removed an option flet-web 1.0.3 still passes; newer versions crash on startup
 uvicorn
 requests
 apscheduler
