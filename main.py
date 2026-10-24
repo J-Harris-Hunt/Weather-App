@@ -489,7 +489,7 @@ async def main(page: ft.Page):
                 ft.Icon(ft.Icons.SATELLITE_ALT, color="cyan300", size=18),
                 ft.Text("Weather Radar: Rain & Storms Near You", size=14, weight=ft.FontWeight.BOLD, color="amber300"),
             ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
-            ft.Text("See where rain is falling and where it's heading. Shows the past 2 hours plus a short-term outlook, with your location pinned.", size=11, color="grey400", text_align=ft.TextAlign.CENTER),
+            ft.Text("See where rain is falling now and where it has been. Shows the past 2 hours, plus a short-term outlook when one is available, with your location pinned.", size=11, color="grey400", text_align=ft.TextAlign.CENTER),
             radar_timestamp_text,
             ft.Container(height=4),
             radar_button_widget,
