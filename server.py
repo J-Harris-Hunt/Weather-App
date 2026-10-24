@@ -1822,10 +1822,7 @@ def get_radar_page(
         let isPlaying = true;
         let timer = null;
 
-        // Continuous atmospheric advection vector (East-Northeast at base zoom 8)
-        const baseShiftX = 9;  // +9px East per 10-minute step
-        const baseShiftY = -3; // -3px North per 10-minute step
-        const totalFutureSteps = 6; // 60 minutes forecast window (+10m through +60m)
+        const maxFutureSteps = 6; // up to 60 minutes of RainViewer's own forecast frames (+10m through +60m)
 
         fetch('https://api.rainviewer.com/public/weather-maps.json')
             .then(res => res.json())
@@ -1853,33 +1850,17 @@ def get_radar_page(
 
                 liveIndex = past.length - 1;
 
-                // Build guaranteed 60-minute prediction loop without jumps
-                for (let step = 1; step <= totalFutureSteps; step++) {{
-                    const futureTime = liveTime + (step * 600);
-                    const minuteOffset = step * 10;
-                    
-                    let path = lastPast.path;
-                    let sx = 0;
-                    let sy = 0;
-
-                    if (rawNowcast.length >= step) {{
-                        path = rawNowcast[step - 1].path;
-                        sx = 0;
-                        sy = 0;
-                    }} else {{
-                        const extraSteps = step - rawNowcast.length;
-                        path = rawNowcast.length > 0 ? rawNowcast[rawNowcast.length - 1].path : lastPast.path;
-                        sx = extraSteps * baseShiftX;
-                        sy = extraSteps * baseShiftY;
-                    }}
-
+                // Only real forecast frames from RainViewer are shown. If it sends none, the loop ends at LIVE
+                // (no made-up drift: a fixed direction would contradict the real storm motion).
+                const futureCount = Math.min(rawNowcast.length, maxFutureSteps);
+                for (let step = 1; step <= futureCount; step++) {{
                     allFrames.push({{
-                        time: futureTime,
-                        path: path,
+                        time: liveTime + (step * 600),
+                        path: rawNowcast[step - 1].path,
                         type: 'predicted',
-                        minuteOffset: minuteOffset,
-                        shiftX: sx,
-                        shiftY: sy,
+                        minuteOffset: step * 10,
+                        shiftX: 0,
+                        shiftY: 0,
                         opacity: Math.max(0.60, 0.85 - (step * 0.03))
                     }});
                 }}
