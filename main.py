@@ -3,6 +3,7 @@ import re
 import inspect
 import urllib.parse
 import logging
+import os
 import flet as ft
 try:
     import flet_geolocator as ftg
@@ -10,6 +11,11 @@ except Exception:          # the app still runs (with typed locations) if the pa
     ftg = None
 from datetime import datetime
 import server
+
+# Official "Get it on Google Play" artwork, downloaded unmodified from Google's Partner Marketing Hub.
+# The badge only shows once this file is in assets/.
+PLAY_BADGE_FILE = "google-play-badge.png"
+PLAY_BADGE_AVAILABLE = os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", PLAY_BADGE_FILE))
 
 # Replace these with your live Stripe Payment Links from dashboard.stripe.com/payment-links
 DONATION_LINKS = {
@@ -1254,6 +1260,22 @@ async def main(page: ft.Page):
     SHARE_TEXT = "Try Thick Moose Weather: free, ad-free, hyper-local weather for exactly where you are. " + SHARE_URL
     share_sheet_busy = [False]
 
+    # "Get it on Google Play" badge for website visitors. Google's rules: use the artwork as-is,
+    # at least 28px tall, with clear space of a quarter of its height on every side.
+    # Starts hidden; shown after the store-mode check below, so it never appears inside the Play app.
+    PLAY_BADGE_HEIGHT = 48
+    play_store_badge = ft.Container(
+        content=ft.Column([
+            ft.Image(src="/" + PLAY_BADGE_FILE, height=PLAY_BADGE_HEIGHT, fit="contain"),
+            ft.Text("Google Play and the Google Play logo are trademarks of Google LLC.",
+                    size=9, color="grey500", text_align=ft.TextAlign.CENTER),
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4),
+        padding=PLAY_BADGE_HEIGHT // 4,
+        url=PLAY_STORE_URL,
+        tooltip="Get Thick Moose Weather on Google Play",
+        visible=False,
+    )
+
     async def _maybe_await(value):
         if inspect.isawaitable(value):
             return await value
@@ -1403,6 +1425,7 @@ async def main(page: ft.Page):
         details_card,
         ft.Container(height=10),
         radar_container,
+        ft.Row([play_store_badge], alignment=ft.MainAxisAlignment.CENTER),
     ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, visible=True)
 
     tab_forecast = ft.Column([
@@ -1483,6 +1506,9 @@ async def main(page: ft.Page):
             await storage_set("tmw_store_app", "1")
         if (await storage_get("tmw_store_app")) == "1":
             keep_weather_free_badge.visible = False
+            page.update()
+        elif PLAY_BADGE_AVAILABLE:
+            play_store_badge.visible = True      # website only: no point advertising the app inside the app
             page.update()
     except Exception:
         logging.debug("Store-mode check failed", exc_info=True)
