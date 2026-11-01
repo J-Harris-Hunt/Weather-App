@@ -9,3 +9,4 @@ python-dotenv
 pydantic
 flet-geolocator>=1.0.3
 tzdata
+google-auth>=2.30
