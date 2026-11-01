@@ -14,7 +14,7 @@ import server
 
 # Official "Get it on Google Play" artwork, downloaded unmodified from Google's Partner Marketing Hub.
 # The badge only shows once this file is in assets/.
-PLAY_BADGE_FILE = "google-play-badge.png"
+PLAY_BADGE_FILE = "google-play-badge.svg"
 PLAY_BADGE_AVAILABLE = os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", PLAY_BADGE_FILE))
 
 # Replace these with your live Stripe Payment Links from dashboard.stripe.com/payment-links
@@ -1262,17 +1262,15 @@ async def main(page: ft.Page):
 
     # "Get it on Google Play" badge for website visitors. Google's rules: use the artwork as-is,
     # at least 28px tall, with clear space of a quarter of its height on every side.
-    # Google's PNG is 880x572 with the badge itself only 240px tall in the middle; the transparent
-    # border around it already gives more than the required clear space. So size the whole image
-    # to make the visible badge about 48px tall.
     # Starts hidden; shown after the store-mode check below, so it never appears inside the Play app.
     PLAY_BADGE_HEIGHT = 48
     play_store_badge = ft.Container(
         content=ft.Column([
-            ft.Image(src="/" + PLAY_BADGE_FILE, height=round(PLAY_BADGE_HEIGHT * 572 / 240), fit="contain"),
+            ft.Image(src="/" + PLAY_BADGE_FILE, height=PLAY_BADGE_HEIGHT, fit="contain"),
             ft.Text("Google Play and the Google Play logo are trademarks of Google LLC.",
                     size=9, color="grey500", text_align=ft.TextAlign.CENTER),
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4),
+        padding=PLAY_BADGE_HEIGHT // 4,
         url=PLAY_STORE_URL,
         tooltip="Get Thick Moose Weather on Google Play",
         visible=False,
