@@ -1,3 +1,4 @@
+import asyncio
 import os
 import html
 import json
@@ -2012,6 +2013,157 @@ h1{font-size:1.6rem}h2{font-size:1.1rem;margin-top:1.6em}a{color:#0b5fd1}.muted{
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy_policy():
     return HTMLResponse(PRIVACY_POLICY_HTML)
+
+
+# ---------------------------------------------------------------------------
+# Tips through Google Play Billing (Android app only).
+# The page below runs inside the Play app (a Trusted Web Activity), where Chrome offers the Digital
+# Goods API. The tip itself is bought through Google; this server only confirms the purchase with
+# Google and acknowledges it, because Google refunds purchases that aren't acknowledged within 3 days.
+# Create these four one-time products in Play Console (Monetize > Products > In-app products) with the
+# same IDs, and give Play Console access to a service account whose JSON key is set in the Render
+# environment variable GOOGLE_PLAY_SERVICE_ACCOUNT_JSON.
+# ---------------------------------------------------------------------------
+PLAY_PACKAGE_NAME = os.environ.get("PLAY_PACKAGE_NAME", "com.thickmooselabs.weather")
+TIP_PRODUCT_IDS = ("tip_1", "tip_3", "tip_5", "tip_10")
+_PLAY_API = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications"
+_play_credentials = None
+_play_credentials_lock = threading.Lock()
+
+
+def _play_auth_headers():
+    """Authorization header for the Google Play Developer API, or None when no key is configured."""
+    global _play_credentials
+    raw = os.environ.get("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON", "").strip()
+    if not raw:
+        return None
+    from google.oauth2 import service_account
+    from google.auth.transport.requests import Request as GoogleRequest
+    with _play_credentials_lock:
+        if _play_credentials is None:
+            _play_credentials = service_account.Credentials.from_service_account_info(
+                json.loads(raw), scopes=["https://www.googleapis.com/auth/androidpublisher"])
+        if not _play_credentials.valid:
+            _play_credentials.refresh(GoogleRequest())
+        return {"Authorization": f"Bearer {_play_credentials.token}"}
+
+
+def verify_and_acknowledge_tip(product_id: str, purchase_token: str):
+    """Ask Google whether this purchase is real, and acknowledge it. Returns (ok, message)."""
+    if product_id not in TIP_PRODUCT_IDS or not (10 <= len(purchase_token) <= 2000):
+        return False, "Invalid tip."
+    headers = _play_auth_headers()
+    if headers is None:
+        return False, "Tips aren't set up on the server yet."
+    base = f"{_PLAY_API}/{PLAY_PACKAGE_NAME}/purchases/products/{product_id}/tokens/{urllib.parse.quote(purchase_token, safe='')}"
+    r = requests.get(base, headers=headers, timeout=15)
+    if r.status_code != 200:
+        logger.warning("Play purchase lookup failed: %s %s", r.status_code, r.text[:200])
+        return False, "Google could not confirm this purchase."
+    purchase = r.json()
+    if purchase.get("purchaseState") != 0:            # 0 = purchased; 1 = canceled, 2 = pending
+        return False, "This purchase is not completed."
+    if purchase.get("acknowledgementState") == 0:
+        a = requests.post(base + ":acknowledge", headers=headers, json={}, timeout=15)
+        if a.status_code not in (200, 204):
+            logger.warning("Play acknowledge failed: %s %s", a.status_code, a.text[:200])
+            return False, "Could not finish this purchase. It will be retried."
+    return True, "Thank you!"
+
+
+@app.post("/tip/verify")
+async def tip_verify(payload: dict):
+    product_id = str(payload.get("productId", ""))[:40]
+    purchase_token = str(payload.get("purchaseToken", ""))
+    try:
+        ok, message = await asyncio.to_thread(verify_and_acknowledge_tip, product_id, purchase_token)
+    except Exception:
+        logger.exception("Tip verification failed")
+        raise HTTPException(status_code=502, detail="Could not reach Google to confirm the tip.")
+    if not ok:
+        raise HTTPException(status_code=400, detail=message)
+    return {"ok": True, "message": message}
+
+
+TIP_PAGE_HTML = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thick Moose Weather - Tip the Moose</title>
+<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:28px 18px 60px;line-height:1.5;color:#e8ebf1;background:#12151b;text-align:center}
+h1{font-size:1.4rem;color:#ffd54f}p{color:#c3cad6}.row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:22px 0}
+button{background:#ffca28;color:#111;border:0;border-radius:12px;padding:14px 22px;font-size:1.05rem;font-weight:700;min-width:96px}
+button:disabled{opacity:.5}#msg{min-height:1.6em;color:#9ccc65}#msg.err{color:#ef9a9a}a{color:#7fb2ff}</style></head>
+<body>
+<h1>Tip the Moose</h1>
+<p>Thick Moose Weather is free and ad-free. A tip helps keep it that way, and part of it goes toward carbon removal. Thank you!</p>
+<div class="row" id="buttons"></div>
+<p id="msg"></p>
+<p><a href="/">Back to the weather</a></p>
+<script>
+const PRODUCTS = ["tip_1", "tip_3", "tip_5", "tip_10"];
+const BILLING = "https://play.google.com/billing";
+const msg = document.getElementById("msg");
+function say(text, isError) { msg.textContent = text; msg.className = isError ? "err" : ""; }
+
+async function confirmWithServer(productId, purchaseToken) {
+  const r = await fetch("/tip/verify", {method: "POST", headers: {"Content-Type": "application/json"},
+                                        body: JSON.stringify({productId, purchaseToken})});
+  return r.ok;
+}
+
+async function main() {
+  if (!("getDigitalGoodsService" in window)) { say("Tips are only available in the Android app.", true); return; }
+  let service;
+  try { service = await window.getDigitalGoodsService(BILLING); }
+  catch (e) { say("Tips are only available in the Android app.", true); return; }
+
+  let details = [];
+  try { details = await service.getDetails(PRODUCTS); } catch (e) {}
+  if (!details.length) { say("Tips aren't available right now. Please try again later.", true); return; }
+
+  // Finish any tip that was paid but never confirmed (for example the app closed mid-purchase).
+  try {
+    for (const p of await service.listPurchases()) {
+      if (await confirmWithServer(p.itemId, p.purchaseToken)) { try { await service.consume(p.purchaseToken); } catch (e) {} }
+    }
+  } catch (e) {}
+
+  const box = document.getElementById("buttons");
+  details.sort((a, b) => parseFloat(a.price.value) - parseFloat(b.price.value));
+  for (const d of details) {
+    const b = document.createElement("button");
+    b.textContent = new Intl.NumberFormat(undefined, {style: "currency", currency: d.price.currency}).format(d.price.value);
+    b.onclick = () => buy(service, d.itemId, b);
+    box.appendChild(b);
+  }
+}
+
+async function buy(service, itemId, button) {
+  button.disabled = true; say("");
+  try {
+    const request = new PaymentRequest([{supportedMethods: BILLING, data: {sku: itemId}}],
+                                       {total: {label: "Total", amount: {currency: "USD", value: "0"}}});
+    const response = await request.show();
+    const token = response.details.purchaseToken;
+    if (await confirmWithServer(itemId, token)) {
+      try { await service.consume(token); } catch (e) {}        // lets the same tip be bought again
+      await response.complete("success");
+      say("Thank you! You're keeping the weather free.");
+    } else {
+      await response.complete("fail");
+      say("We couldn't confirm that tip. If you were charged it will be refunded.", true);
+    }
+  } catch (e) {
+    if (e && e.name !== "AbortError") say("The tip didn't go through.", true);
+  } finally { button.disabled = false; }
+}
+main();
+</script>
+</body></html>"""
+
+
+@app.get("/tip", response_class=HTMLResponse)
+async def tip_page():
+    return HTMLResponse(TIP_PAGE_HTML)
 
 
 @app.get("/.well-known/assetlinks.json", response_class=FileResponse)

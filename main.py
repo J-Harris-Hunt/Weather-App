@@ -15,6 +15,9 @@ import server
 # Official "Get it on Google Play" artwork, downloaded unmodified from Google's Partner Marketing Hub.
 # The badge only shows once this file is in assets/.
 PLAY_BADGE_FILE = "google-play-badge.svg"
+# The Play-app tip button stays hidden until this is set to "true" on Render, which should only happen once
+# a version of the Android app built with Google Play Billing is live. Older app versions can't take tips.
+PLAY_TIPS_ENABLED = os.environ.get("PLAY_TIPS_ENABLED", "").strip().lower() in ("1", "true", "yes")
 PLAY_BADGE_AVAILABLE = os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", PLAY_BADGE_FILE))
 
 # Replace these with your live Stripe Payment Links from dashboard.stripe.com/payment-links
@@ -422,6 +425,38 @@ async def main(page: ft.Page):
         ink=True,
         on_click=open_donation,
         tooltip="Support Thick Moose Weather — Keep it 100% Ad-Free",
+    )
+
+    # Play-app version of the tip badge: opens /tip, which uses Google Play Billing (the Stripe links
+    # above are not allowed inside the Play app). Hidden on the website; shown by the store-mode check below.
+    play_tip_badge = ft.Container(
+        content=ft.Row([
+            ft.Container(
+                content=ft.Image(
+                    src="/donation_dog.jpg",
+                    width=42,
+                    height=42,
+                    fit="cover",
+                    border_radius=21,
+                    error_content=ft.Icon(ft.Icons.PETS, color="amber300", size=24),
+                ),
+                border=ft.Border.all(1.5, "amber300"),
+                border_radius=22,
+            ),
+            ft.Column([
+                ft.Text("Tip the Moose", size=14, weight=ft.FontWeight.BOLD, color="amber300"),
+                ft.Text("Help keep Thick Moose ad-free", size=10, color="grey300"),
+            ], spacing=1),
+            ft.Icon(ft.Icons.VOLUNTEER_ACTIVISM, size=20, color="amber300"),
+        ], alignment=ft.MainAxisAlignment.CENTER, spacing=10),
+        bgcolor="#18202d",
+        border=ft.Border.all(1.5, "amber400"),
+        border_radius=24,
+        padding=ft.Padding(16, 8, 18, 8),
+        ink=True,
+        url="/tip",
+        tooltip="Tip the Moose with Google Play",
+        visible=False,
     )
 
     widget_loc_text = ft.Text("No location selected", size=17, weight=ft.FontWeight.BOLD, color="white")
@@ -1440,6 +1475,7 @@ async def main(page: ft.Page):
     tab_more = ft.Column([
         ft.Container(height=10),
         ft.Row([keep_weather_free_badge], alignment=ft.MainAxisAlignment.CENTER),
+        ft.Row([play_tip_badge], alignment=ft.MainAxisAlignment.CENTER),
         ft.Container(height=10),
         feedback_section,
     ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, visible=False)
@@ -1506,6 +1542,7 @@ async def main(page: ft.Page):
             await storage_set("tmw_store_app", "1")
         if (await storage_get("tmw_store_app")) == "1":
             keep_weather_free_badge.visible = False
+            play_tip_badge.visible = PLAY_TIPS_ENABLED
             page.update()
         elif PLAY_BADGE_AVAILABLE:
             play_store_badge.visible = True      # website only: no point advertising the app inside the app
